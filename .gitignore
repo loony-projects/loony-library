@@ -9,3 +9,5 @@ migration/outline.json
 backend/.env
 frontend/.env
 frontend/dist/
+backend/data/
+migration/books/
