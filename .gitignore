@@ -1,13 +1,31 @@
-ignored_files/
-pdfs/
-json/
-metadata/
-TRAINING_GUIDE/
+# Dependencies
 node_modules/
-migration/.env
-migration/outline.json
+
+# Build output
+frontend/dist/
+
+# Local environment config (see .env.example in each project)
 backend/.env
 frontend/.env
-frontend/dist/
-backend/data/
+migration/.env
+
+# Machine-local migration input/output - book configs point at absolute
+# source paths on this machine, and outline.json/images are generated,
+# not source (see docs/migration.md)
 migration/books/
+migration/outline.json
+backend/data/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# OS
+.DS_Store
