@@ -4,6 +4,10 @@ import { parseFile } from "./parseFile.js";
 
 const PAGE_FILE_RE = /_page_(\d+)\.md$/;
 
+function normalizeHeadingText(text) {
+  return text.trim().toLowerCase().replace(/\.+$/, "");
+}
+
 function listPages(rootDir) {
   return fs
     .readdirSync(rootDir)
@@ -111,6 +115,21 @@ export function buildOutlineFlatChapters(rootDir, config) {
       // unless the page has no heading at all (the one chapter whose title
       // page was lost to a skipped OCR page starts directly with body text).
       if (page === entry.startPage && i === 0 && item.kind === "heading") continue;
+
+      // Some sources split the marker and the human-readable title into two
+      // consecutive headings ("Chapter 3" then "Welcome to Day 1") rather
+      // than combining them ("Chapter 31 Unsafe Rust"); when that second
+      // heading just repeats the config's chapter title verbatim, drop it
+      // too instead of surfacing it a second time as the chapter's own
+      // first subheading.
+      if (
+        page === entry.startPage &&
+        i === 1 &&
+        item.kind === "heading" &&
+        normalizeHeadingText(item.title) === normalizeHeadingText(entry.title)
+      ) {
+        continue;
+      }
 
       if (item.kind === "heading") {
         // parseFile splits off a leading bare-digit numbering into its own
