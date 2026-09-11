@@ -1,0 +1,20 @@
+{
+  "name": "loony-library-migration",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Config-driven tool that parses a book's markdown source into the books/chapters/sections/content_blocks Postgres schema. Usage: npm run dry-run -- --book books/<slug>.json",
+  "type": "module",
+  "scripts": {
+    "dry-run": "node src/migrate.js --out outline.json",
+    "load": "node src/migrate.js --load",
+    "reload": "node src/migrate.js --load --reset"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mdast-util-to-string": "^4.0.0",
+    "pg": "^8.12.0",
+    "unified": "^11.0.5",
+    "remark-parse": "^11.0.0",
+    "remark-gfm": "^4.0.0"
+  }
+}

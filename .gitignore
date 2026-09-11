@@ -1,0 +1,11 @@
+ignored_files/
+pdfs/
+json/
+metadata/
+TRAINING_GUIDE/
+node_modules/
+migration/.env
+migration/outline.json
+backend/.env
+frontend/.env
+frontend/dist/
