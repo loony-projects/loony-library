@@ -13,7 +13,8 @@ create table books (
     isbn            text,
     edition         text,
     price           text,
-    published_year  int
+    published_year  int,
+    cover_image     text  -- filename under backend's data/covers/, served at /covers/:file
 );
 
 create table chapters (

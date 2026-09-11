@@ -12,6 +12,7 @@ npm start                # http://localhost:4000
 
 - `GET /api/health`
 - `GET /api/books` — every loaded book's metadata, plus a `chapter_count` (numbered chapters only, excluding front matter)
+- `POST /api/books` — create a book, `multipart/form-data` (`title`, plus optional `author`, `publisher`, `isbn`, `edition`, `price`, `published_year`, `cover` file); slug is derived from the title and uniquified automatically
 - `GET /api/books/:slug` — one book's metadata
 - `GET /api/books/:slug/toc` — nested chapter/section tree
 - `POST /api/books/:slug/chapters` — create a chapter (`{ title, number? }`), appended after existing ones, with one empty top-level section titled after it
@@ -23,3 +24,4 @@ npm start                # http://localhost:4000
 - `GET /api/books/:slug/search?q=...` — full-text search (Postgres `tsvector`/`ts_rank`), ranked, with `ts_headline` snippets
 - `GET /api/books/:slug/glossary`, `GET /api/books/:slug/symbols`
 - `GET /images/:file` — figures referenced by image content blocks
+- `GET /covers/:file` — book cover images uploaded via `POST /api/books`

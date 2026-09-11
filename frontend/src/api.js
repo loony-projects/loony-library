@@ -24,9 +24,24 @@ async function del(path) {
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
 }
 
+async function postForm(path, formData) {
+  const res = await fetch(`${API_URL}${path}`, { method: "POST", body: formData });
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return res.json();
+}
+
 export const api = {
   books: () => get("/api/books"),
   book: (slug) => get(`/api/books/${slug}`),
+  createBook: ({ title, author, publisher, isbn, edition, published_year, price, coverFile }) => {
+    const form = new FormData();
+    form.append("title", title);
+    for (const [key, value] of Object.entries({ author, publisher, isbn, edition, published_year, price })) {
+      if (value) form.append(key, value);
+    }
+    if (coverFile) form.append("cover", coverFile);
+    return postForm("/api/books", form);
+  },
   toc: (slug) => get(`/api/books/${slug}/toc`),
   createChapter: (bookSlug, { title, number }) => post(`/api/books/${bookSlug}/chapters`, { title, number }),
   deleteChapter: (id) => del(`/api/chapters/${id}`),
@@ -39,4 +54,5 @@ export const api = {
   glossary: (slug) => get(`/api/books/${slug}/glossary`),
   symbols: (slug) => get(`/api/books/${slug}/symbols`),
   imageUrl: (path) => `${API_URL}/images/${path}`,
+  coverUrl: (filename) => `${API_URL}/covers/${filename}`,
 };

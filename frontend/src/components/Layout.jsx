@@ -191,7 +191,7 @@ export default function Layout() {
       {creating && (
         <NewItemDialog
           heading={creating.type === "chapter" ? "New chapter" : "New section"}
-          showNumber={creating.type === "chapter"}
+          extraField={creating.type === "chapter" ? { key: "number", label: "Number" } : undefined}
           onCreate={handleCreate}
           onCancel={() => setCreating(null)}
         />

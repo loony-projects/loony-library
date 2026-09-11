@@ -10,12 +10,14 @@ import { router as referenceRouter } from "./routes/reference.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IMAGES_DIR = path.resolve(__dirname, "..", "data", "images");
+const COVERS_DIR = path.resolve(__dirname, "..", "data", "covers");
 
 export const app = express();
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
 app.use("/images", express.static(IMAGES_DIR));
+app.use("/covers", express.static(COVERS_DIR));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.use("/api", bookRouter);

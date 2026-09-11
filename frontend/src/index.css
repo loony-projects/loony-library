@@ -560,11 +560,39 @@ blockquote {
   border-color: var(--accent);
 }
 
+.library-card--add {
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 100%;
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  font-size: 0.9rem;
+}
+
+.library-card--add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+  transform: translateY(-4px);
+  box-shadow: none;
+}
+
 .library-card-cover {
   aspect-ratio: 3 / 4;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.library-card-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .library-card-initial {
@@ -951,4 +979,191 @@ blockquote {
 .dialog-cancel:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* --- book creation wizard --- */
+
+.wizard {
+  width: 100%;
+  max-width: 480px;
+  max-height: min(680px, 90vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  font-family: system-ui, sans-serif;
+}
+
+.wizard-header {
+  flex-shrink: 0;
+  padding: 1.5rem 1.5rem 0;
+}
+
+.wizard-steps {
+  display: flex;
+  gap: 1.25rem;
+  margin: -0.4rem 0 1.1rem;
+}
+
+.wizard-step {
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid transparent;
+}
+
+.wizard-step.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.wizard-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1.5rem;
+}
+
+.wizard-cover-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 140px;
+  margin-bottom: 1.1rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0.5rem;
+}
+
+.wizard-cover-upload:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-cover-upload img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wizard-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+}
+
+.wizard-slug-preview {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: -0.4rem 0 1rem;
+}
+
+.wizard-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 1rem;
+}
+
+.wizard-chapter-input {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.wizard-chapter-input input {
+  flex: 1;
+  min-width: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+}
+
+.wizard-chapter-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wizard-chapter-input button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.wizard-chapter-input button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wizard-chapter-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.wizard-chapter-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--sidebar-bg);
+  border-radius: 6px;
+}
+
+.wizard-chapter-list li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wizard-chapter-list li button {
+  flex-shrink: 0;
+  display: inline-flex;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.wizard-chapter-list li button:hover {
+  color: #a23b3b;
+}
+
+.wizard .dialog-error {
+  padding: 0 1.5rem;
+}
+
+.wizard .dialog-actions {
+  flex-shrink: 0;
+  padding: 1.1rem 1.5rem;
+}
+
+@media (max-width: 480px) {
+  .wizard-field-grid {
+    grid-template-columns: 1fr;
+  }
 }

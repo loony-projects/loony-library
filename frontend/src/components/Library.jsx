@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Plus, Search } from "lucide-react";
 import { api } from "../api";
 import { coverGradient } from "../coverArt";
+import BookWizard from "./BookWizard";
 
 function BookCard({ book }) {
   return (
     <Link to={`/${book.slug}`} className="library-card">
-      <div className="library-card-cover" style={{ background: coverGradient(book.slug) }}>
-        <span className="library-card-initial">{book.title.charAt(0).toUpperCase()}</span>
+      <div
+        className="library-card-cover"
+        style={book.cover_image ? undefined : { background: coverGradient(book.slug) }}
+      >
+        {book.cover_image ? (
+          <img className="library-card-cover-img" src={api.coverUrl(book.cover_image)} alt="" />
+        ) : (
+          <span className="library-card-initial">{book.title.charAt(0).toUpperCase()}</span>
+        )}
       </div>
       <div className="library-card-body">
         <span className="library-card-title">{book.title}</span>
@@ -27,9 +35,11 @@ function BookCard({ book }) {
 }
 
 export default function Library() {
+  const navigate = useNavigate();
   const [books, setBooks] = useState(null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     api
@@ -44,6 +54,28 @@ export default function Library() {
     if (!q) return books;
     return books.filter((b) => b.title.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q));
   }, [books, query]);
+
+  // Creates the book, then its opening chapters in order (each one also
+  // gets its own initial section - see POST /books/:slug/chapters), and
+  // lands you straight in the first chapter's editor if there is one -
+  // otherwise the book's (empty) home page, same as any other book that's
+  // had all its chapters removed.
+  async function handleFinishWizard({ title, chapters, coverFile, ...metadata }) {
+    const { book } = await api.createBook({ title, coverFile, ...metadata });
+
+    let firstSectionId = null;
+    for (const chapterTitle of chapters) {
+      const { section } = await api.createChapter(book.slug, { title: chapterTitle });
+      firstSectionId ??= section.id;
+    }
+
+    setCreating(false);
+    if (firstSectionId) {
+      navigate(`/${book.slug}/sections/${firstSectionId}`, { state: { autoEdit: true } });
+    } else {
+      navigate(`/${book.slug}`);
+    }
+  }
 
   if (error) return <p className="error">Couldn't load the library: {error}</p>;
 
@@ -65,17 +97,22 @@ export default function Library() {
 
       {!books && <p className="loading">Loading…</p>}
 
-      {books && filtered.length > 0 && (
-        <div className="library-grid">
-          {filtered.map((b) => (
-            <BookCard key={b.id} book={b} />
-          ))}
-        </div>
+      {books && (
+        <>
+          <div className="library-grid">
+            <button type="button" className="library-card library-card--add" onClick={() => setCreating(true)}>
+              <Plus size={26} />
+              <span>New book</span>
+            </button>
+            {filtered.map((b) => (
+              <BookCard key={b.id} book={b} />
+            ))}
+          </div>
+          {filtered.length === 0 && <p className="library-empty">No books match "{query}".</p>}
+        </>
       )}
 
-      {books && filtered.length === 0 && (
-        <p className="library-empty">No books match "{query}".</p>
-      )}
+      {creating && <BookWizard onFinish={handleFinishWizard} onCancel={() => setCreating(false)} />}
     </div>
   );
 }

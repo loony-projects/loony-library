@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 /**
- * A small centered modal for creating a chapter or section - just enough to
- * name and place the new item. Writing its content happens afterward in the
- * full-screen MarkdownEditor (see Layout.jsx), so this dialog stays minimal.
+ * A small centered modal for creating a book, chapter, or section - just
+ * enough to name and place the new item. Writing a section's content
+ * happens afterward in the full-screen MarkdownEditor (see Layout.jsx and
+ * Library.jsx), so this dialog stays minimal: a title, plus one optional
+ * extra field the caller can ask for (a chapter's number, a book's author).
  */
-export default function NewItemDialog({ heading, showNumber, onCreate, onCancel }) {
+export default function NewItemDialog({ heading, extraField, onCreate, onCancel }) {
   const [title, setTitle] = useState("");
-  const [number, setNumber] = useState("");
+  const [extraValue, setExtraValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
@@ -24,13 +26,16 @@ export default function NewItemDialog({ heading, showNumber, onCreate, onCancel 
       setSaving(true);
       setError(null);
       try {
-        await onCreate({ title: title.trim(), number: number.trim() || undefined });
+        await onCreate({
+          title: title.trim(),
+          ...(extraField && { [extraField.key]: extraValue.trim() || undefined }),
+        });
       } catch (err) {
         setError(err.message);
         setSaving(false);
       }
     },
-    [title, number, onCreate]
+    [title, extraValue, extraField, onCreate]
   );
 
   return (
@@ -48,10 +53,10 @@ export default function NewItemDialog({ heading, showNumber, onCreate, onCancel 
             required
           />
         </label>
-        {showNumber && (
+        {extraField && (
           <label className="dialog-label">
-            Number <span className="dialog-optional">(optional)</span>
-            <input type="text" value={number} onChange={(e) => setNumber(e.target.value)} />
+            {extraField.label} <span className="dialog-optional">(optional)</span>
+            <input type="text" value={extraValue} onChange={(e) => setExtraValue(e.target.value)} />
           </label>
         )}
         {error && <p className="dialog-error">{error}</p>}
