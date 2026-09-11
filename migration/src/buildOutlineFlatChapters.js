@@ -16,23 +16,122 @@ function listPages(rootDir) {
     .sort((a, b) => a.page - b.page);
 }
 
+// Every heading inside a chapter becomes one in-place `subheading` content
+// block on that chapter's single flat section - no nav-tree children. Used
+// when a book's headings can't be trusted to have real numbering (e.g.
+// Jouga Boro Raokhanthi: unreliable heading levels, a chapter with no
+// title heading at all).
+function createFlatSink(chapterTitle) {
+  const section = {
+    numbering: null,
+    title: chapterTitle,
+    depth: 1,
+    sort_order: 0,
+    source_file: null,
+    blocks: [],
+    children: [],
+  };
+  return {
+    rootSections: [section],
+    pushHeading(item) {
+      // parseFile splits off a leading bare-digit numbering into its own
+      // field (needed by the numbering strategy); this sink doesn't use
+      // that field for structure, so fold it back into the display text
+      // rather than silently dropping enumeration like "3." from a
+      // numbered subheading such as "3. बिसुबुं बिसुं (Determinative Compound)".
+      const text = item.numbering ? `${item.numbering}. ${item.title}` : item.title;
+      section.blocks.push({ kind: "block", block_type: "subheading", content: { text } });
+    },
+    pushBlock(item) {
+      section.blocks.push(item);
+    },
+  };
+}
+
+// Builds a real section tree inside a chapter from its headings' numbering
+// ("1.1" -> depth 2, "1.1.2" -> depth 3, ...), the same depth-from-numbering
+// idea as buildOutlineByNumbering.js's attachToSections but scoped to one
+// chapter's page range instead of a whole curated folder. Used for books
+// whose chapters are marked separately from their content (e.g. Comprehensive
+// Rust's "## Chapter N" markers) but whose subsections carry real, trustworthy
+// numbering - so those subsections deserve to be real navigable/deep-linkable
+// sections instead of flattened subheading blocks.
+//
+// A depth-2 heading ("1.1") has no depth-1 parent to nest under (chapters
+// aren't numbered as sections themselves), so depth 2 is the root level
+// here; an intro section (numbering: null, titled after the chapter) holds
+// whatever content precedes the chapter's first numbered heading.
+function createNumberedSink(chapterTitle) {
+  const introSection = {
+    numbering: null,
+    title: chapterTitle,
+    depth: 1,
+    sort_order: 0,
+    source_file: null,
+    blocks: [],
+    children: [],
+  };
+  const roots = [introSection];
+  const stack = []; // stack[depth] = currently open numbered section at that depth
+  let current = introSection;
+  let sortOrder = 1;
+
+  function openNumberedSection(numbering, title, sourceFile) {
+    const depth = numbering.split(".").length;
+    const section = { numbering, title, depth, sort_order: sortOrder++, source_file: sourceFile, blocks: [], children: [] };
+
+    if (depth <= 2) {
+      roots.push(section);
+      stack.length = 0;
+    } else {
+      let parentDepth = depth - 1;
+      while (parentDepth > 1 && !stack[parentDepth]) parentDepth--;
+      const parent = stack[parentDepth];
+      if (parent) parent.children.push(section);
+      else roots.push(section); // no shallower heading seen yet; promote to root
+    }
+
+    stack[depth] = section;
+    stack.length = depth + 1;
+    current = section;
+    return section;
+  }
+
+  return {
+    rootSections: roots,
+    pushHeading(item, sourceFile) {
+      if (item.numbering) {
+        openNumberedSection(item.numbering, item.title, sourceFile);
+        return;
+      }
+      // Unnumbered heading (a "Listing N.N" label, an EXERCISE lead-in, ...)
+      // - flatten onto whichever section is currently open, same as the
+      // other two strategies do for their own unnumbered headings.
+      current.blocks.push({ kind: "block", block_type: "subheading", content: { text: item.title } });
+    },
+    pushBlock(item) {
+      current.blocks.push(item);
+    },
+  };
+}
+
 /**
  * Strategy for books whose source is a flat dump of per-page markdown files
- * (pdf-to-md's raw output) rather than curated chapter directories, and
- * which don't have a numbering scheme in their headings to derive tree depth
- * from (see buildOutlineByNumbering.js for that case).
+ * (pdf-to-md's raw output) rather than curated chapter directories.
  *
- * Chapter boundaries here are driven by explicit page numbers in the book
- * config rather than by matching heading text: this book's own heading
- * levels are inconsistent (some subsection headings sit at the same `##`
- * level as real chapters - e.g. the six subtypes of the "बिसुं" chapter),
- * and one chapter's title heading was lost entirely to a skipped OCR page.
- * Page numbers were verified once against the source and are ground truth,
- * not inferred at parse time.
+ * Chapter boundaries are driven by explicit page numbers in the book config
+ * rather than by matching heading text: heading levels in this shape of
+ * source are often unreliable (some subsection headings sit at the same
+ * `##` level as real chapters), and a chapter's title heading can be lost
+ * entirely to a skipped OCR page. Page numbers were verified once against
+ * the source and are ground truth, not inferred at parse time.
  *
- * Each chapter becomes exactly one flat section (no nested sub-sections) -
- * every heading found within a chapter's page range, at any level, becomes
- * an in-place `subheading` content block rather than a nav-tree child.
+ * What happens *inside* each chapter depends on `config.chapterSections`:
+ * `"numbered"` builds a real section tree from the chapters' own heading
+ * numbering (see createNumberedSink); anything else (the default) flattens
+ * every heading into subheading blocks on one section per chapter (see
+ * createFlatSink) - for books whose headings can't be trusted to carry
+ * real, complete numbering.
  */
 export function buildOutlineFlatChapters(rootDir, config) {
   const pages = listPages(rootDir);
@@ -56,31 +155,25 @@ export function buildOutlineFlatChapters(rootDir, config) {
     sections: [],
   };
 
+  const createSink = config.chapterSections === "numbered" ? createNumberedSink : createFlatSink;
+
   const bookChapters = [];
   const chapterById = new Map();
   for (const [i, c] of chapters.entries()) {
-    const section = {
-      numbering: null,
-      title: c.title,
-      depth: 1,
-      sort_order: 0,
-      source_file: null,
-      blocks: [],
-      children: [],
-    };
+    const sink = createSink(c.title);
     const chapter = {
       number: c.number,
       slug: c.slug ?? String(i + 1),
       title: c.title,
       sort_order: i + 1, // 0 is reserved for the front-matter chapter
-      sections: [section],
+      sections: sink.rootSections,
     };
     bookChapters.push(chapter);
-    chapterById.set(c.startPage, { chapter, section });
+    chapterById.set(c.startPage, { chapter, sink });
   }
 
   let frontMatterSortOrder = 0;
-  let openSection = null; // the single flat section of whichever chapter is currently open
+  let activeSink = null; // the sink of whichever chapter is currently open
   let chapterStartPage = null; // startPage of the currently open chapter, to know when we've just entered it
 
   for (const { file, page } of pages) {
@@ -106,7 +199,7 @@ export function buildOutlineFlatChapters(rootDir, config) {
 
     if (entry.startPage !== chapterStartPage) {
       chapterStartPage = entry.startPage;
-      openSection = chapterById.get(entry.startPage).section;
+      activeSink = chapterById.get(entry.startPage).sink;
     }
 
     for (const [i, item] of items.entries()) {
@@ -132,16 +225,10 @@ export function buildOutlineFlatChapters(rootDir, config) {
       }
 
       if (item.kind === "heading") {
-        // parseFile splits off a leading bare-digit numbering into its own
-        // field (needed by the numbering strategy); this strategy doesn't
-        // use that field for structure, so fold it back into the display
-        // text rather than silently dropping enumeration like "3." from a
-        // numbered subheading such as "3. बिसुबुं बिसुं (Determinative Compound)".
-        const text = item.numbering ? `${item.numbering}. ${item.title}` : item.title;
-        openSection.blocks.push({ kind: "block", block_type: "subheading", content: { text } });
+        activeSink.pushHeading(item, file);
         continue;
       }
-      openSection.blocks.push(item);
+      activeSink.pushBlock(item);
     }
   }
 
