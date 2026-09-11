@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { highlightCode } from "../highlight";
 
 function Paragraph({ content }) {
   return <p>{content.text}</p>;
@@ -55,6 +56,15 @@ function BlockquoteBlock({ content }) {
   return <blockquote>{content.text}</blockquote>;
 }
 
+function CodeBlock({ content }) {
+  const { html, language } = highlightCode(content.code, content.lang);
+  return (
+    <pre className="block-code">
+      <code className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: html }} />
+    </pre>
+  );
+}
+
 // An in-book heading that isn't a real document section (e.g. "a) Adding
 // personal prenominal prefixes:" or "{a-}:" inside a worked example) - kept
 // out of navigation, rendered in place as a minor heading instead.
@@ -69,6 +79,7 @@ const RENDERERS = {
   table: TableBlock,
   blockquote: BlockquoteBlock,
   subheading: SubheadingBlock,
+  code: CodeBlock,
 };
 
 export default function Block({ block }) {

@@ -14,6 +14,11 @@ function blockToMarkdown(block) {
     return content.caption ? `${line}\n\n*${content.caption}*` : line;
   }
 
+  if (block_type === "code") {
+    const fence = "```";
+    return `${fence}${content.lang || ""}\n${content.code}\n${fence}`;
+  }
+
   return content.markdown || content.text || "";
 }
 

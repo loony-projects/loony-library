@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import { api } from "../api";
 import { blocksToMarkdown } from "../markdown";
 import Block from "./Blocks";
@@ -47,6 +48,7 @@ export default function SectionPage() {
         </h1>
         {!editing && (
           <button type="button" className="section-edit-button" onClick={() => setEditing(true)}>
+            <Pencil size={14} />
             Edit
           </button>
         )}
@@ -54,6 +56,7 @@ export default function SectionPage() {
 
       {editing ? (
         <MarkdownEditor
+          title={section.numbering ? `${section.numbering} ${section.title}` : section.title}
           initialValue={blocksToMarkdown(blocks)}
           onSave={handleSave}
           onCancel={() => setEditing(false)}

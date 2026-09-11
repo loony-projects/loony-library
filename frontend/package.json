@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "dompurify": "^3.2.0",
+    "highlight.js": "^11.10.0",
+    "lucide-react": "^0.474.0",
     "marked": "^15.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

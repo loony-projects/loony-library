@@ -44,7 +44,7 @@ create table content_blocks (
     id          uuid primary key default gen_random_uuid(),
     section_id  uuid not null references sections(id) on delete cascade,
     block_type  text not null check (block_type in
-                    ('paragraph', 'list', 'image', 'table', 'blockquote', 'subheading')),
+                    ('paragraph', 'list', 'image', 'table', 'blockquote', 'subheading', 'code')),
     sort_order  int not null,
     content     jsonb not null,    -- shape depends on block_type, see migration/src/parseFile.js
     tsv         tsvector generated always as (

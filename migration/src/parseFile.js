@@ -118,6 +118,15 @@ export function parseFile(source) {
       continue;
     }
 
+    if (node.type === "code") {
+      items.push({
+        kind: "block",
+        block_type: "code",
+        content: { code: node.value, lang: node.lang || null, text: node.value },
+      });
+      continue;
+    }
+
     if (node.type === "paragraph") {
       const text = mdastToString(node).trim();
       if (!text) continue; // stray empty paragraph
