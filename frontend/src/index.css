@@ -249,12 +249,38 @@ body.resizing-sidebar {
 .section-page h1 {
   font-size: 1.9rem;
   line-height: 1.25;
-  margin: 0 0 1.25rem;
+  margin: 0;
 }
 
 .section-numbering {
   color: var(--accent);
   margin-right: 0.5rem;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.section-edit-button {
+  flex-shrink: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+
+.section-edit-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .section-content {
@@ -440,5 +466,153 @@ blockquote {
   }
   .content {
     padding: 1.5rem;
+  }
+}
+
+.md-editor {
+  font-family: system-ui, sans-serif;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.md-editor-toolbar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.md-editor-toolbar button {
+  font-family: system-ui, sans-serif;
+  font-size: 0.9rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  min-width: 2rem;
+}
+
+.md-editor-toolbar button:hover {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.md-toolbar-bold {
+  font-weight: 700;
+}
+
+.md-toolbar-italic {
+  font-style: italic;
+}
+
+.md-toolbar-preview {
+  margin-left: auto;
+}
+
+.md-toolbar-preview.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.md-editor-body {
+  display: flex;
+}
+
+.md-editor-textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 50vh;
+  padding: 1rem;
+  border: none;
+  resize: vertical;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.md-editor-textarea:focus {
+  outline: none;
+}
+
+.md-editor-body--split .md-editor-textarea {
+  border-right: 1px solid var(--border);
+}
+
+.md-editor-preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 50vh;
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  font-family: "Georgia", "Iowan Old Style", serif;
+  line-height: 1.7;
+}
+
+.md-editor-preview img {
+  max-width: 100%;
+}
+
+.md-editor-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.md-editor-status {
+  color: var(--muted);
+}
+
+.md-editor-error {
+  color: #a23b3b;
+}
+
+.md-editor-footer button {
+  margin-left: auto;
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.md-editor-footer button + button {
+  margin-left: 0;
+}
+
+.md-editor-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.md-editor-save {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: white;
+}
+
+.md-editor-save:disabled,
+.md-editor-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 800px) {
+  .md-editor-body--split {
+    flex-direction: column;
+  }
+  .md-editor-body--split .md-editor-textarea {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
   }
 }

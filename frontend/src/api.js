@@ -6,11 +6,22 @@ async function get(path) {
   return res.json();
 }
 
+async function put(path, body) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return res.json();
+}
+
 export const api = {
   books: () => get("/api/books"),
   book: (slug) => get(`/api/books/${slug}`),
   toc: (slug) => get(`/api/books/${slug}/toc`),
   section: (id) => get(`/api/sections/${id}`),
+  updateSection: (id, markdown) => put(`/api/sections/${id}`, { markdown }),
   search: (slug, q) => get(`/api/books/${slug}/search?q=${encodeURIComponent(q)}`),
   glossary: (slug) => get(`/api/books/${slug}/glossary`),
   symbols: (slug) => get(`/api/books/${slug}/symbols`),
