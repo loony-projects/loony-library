@@ -11,7 +11,7 @@ npm start                # http://localhost:4000
 ## Endpoints
 
 - `GET /api/health`
-- `GET /api/books` — every loaded book's metadata
+- `GET /api/books` — every loaded book's metadata, plus a `chapter_count` (numbered chapters only, excluding front matter)
 - `GET /api/books/:slug` — one book's metadata
 - `GET /api/books/:slug/toc` — nested chapter/section tree
 - `POST /api/books/:slug/chapters` — create a chapter (`{ title, number? }`), appended after existing ones, with one empty top-level section titled after it

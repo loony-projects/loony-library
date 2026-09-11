@@ -7,7 +7,12 @@ export const router = Router();
 router.get("/books", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "select id, slug, title, author, published_year from books order by title"
+      `select b.id, b.slug, b.title, b.author, b.published_year,
+              count(c.id) filter (where c.number is not null)::int as chapter_count
+       from books b
+       left join chapters c on c.book_id = b.id
+       group by b.id
+       order by b.title`
     );
     res.json({ books: rows });
   } catch (err) {
