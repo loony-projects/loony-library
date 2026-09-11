@@ -182,3 +182,16 @@ router.put("/sections/:id", async (req, res, next) => {
   );
   res.json({ blocks });
 });
+
+// Deletes a section and everything under it - child sections cascade
+// recursively (parent_id references sections(id) on delete cascade), and
+// their content_blocks/figures/tables cascade in turn.
+router.delete("/sections/:id", async (req, res, next) => {
+  try {
+    const { rowCount } = await pool.query("delete from sections where id = $1", [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Section not found" });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});

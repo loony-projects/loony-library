@@ -209,7 +209,14 @@ body.resizing-sidebar {
   gap: 0.15rem;
 }
 
-.toc-add-button {
+.toc-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.1rem;
+}
+
+.toc-add-button,
+.toc-delete-button {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -225,13 +232,20 @@ body.resizing-sidebar {
 }
 
 .toc-row:hover .toc-add-button,
-.toc-add-button:focus-visible {
+.toc-row:hover .toc-delete-button,
+.toc-add-button:focus-visible,
+.toc-delete-button:focus-visible {
   opacity: 1;
 }
 
 .toc-add-button:hover {
   background: var(--accent-bg);
   color: var(--accent);
+}
+
+.toc-delete-button:hover {
+  background: #f6dedb;
+  color: #a23b3b;
 }
 
 .toc-link {

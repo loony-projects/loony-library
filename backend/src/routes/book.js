@@ -111,3 +111,16 @@ router.post("/books/:slug/chapters", resolveBookId, async (req, res, next) => {
     client.release();
   }
 });
+
+// Deletes a chapter and everything in it - cascades to its sections
+// (recursively, through their own parent_id self-reference), content_blocks,
+// figures, and tables via the schema's ON DELETE CASCADE chain.
+router.delete("/chapters/:id", async (req, res, next) => {
+  try {
+    const { rowCount } = await pool.query("delete from chapters where id = $1", [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Chapter not found" });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
