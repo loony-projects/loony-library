@@ -196,12 +196,47 @@ body.resizing-sidebar {
 }
 
 .toc-chapter-title {
+  flex: 1;
+  min-width: 0;
   font-weight: 700;
   padding: 0.15rem 0;
   color: var(--text);
 }
 
+.toc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.toc-add-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.toc-row:hover .toc-add-button,
+.toc-add-button:focus-visible {
+  opacity: 1;
+}
+
+.toc-add-button:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
 .toc-link {
+  flex: 1;
+  min-width: 0;
   display: block;
   padding: 0.15rem 0.3rem;
   border-radius: 4px;
@@ -223,6 +258,27 @@ body.resizing-sidebar {
 .toc-numbering {
   color: var(--muted);
   margin-right: 0.35em;
+}
+
+.add-chapter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.75rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+}
+
+.add-chapter-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* --- section page --- */
@@ -693,4 +749,104 @@ blockquote {
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+}
+
+/* --- create chapter/section dialog --- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(38, 36, 32, 0.35);
+  padding: 1rem;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 1.5rem;
+  font-family: system-ui, sans-serif;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.dialog-heading {
+  font-family: "Georgia", "Iowan Old Style", serif;
+  font-size: 1.15rem;
+  margin: 0 0 1.1rem;
+}
+
+.dialog-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+.dialog-optional {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.dialog-label input {
+  font-family: system-ui, sans-serif;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+}
+
+.dialog-label input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dialog-error {
+  font-size: 0.8rem;
+  color: #a23b3b;
+  margin: -0.5rem 0 1rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.dialog-cancel,
+.dialog-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dialog-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.dialog-submit {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: white;
+}
+
+.dialog-submit:disabled,
+.dialog-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

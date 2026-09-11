@@ -14,7 +14,9 @@ npm start                # http://localhost:4000
 - `GET /api/books` — every loaded book's metadata
 - `GET /api/books/:slug` — one book's metadata
 - `GET /api/books/:slug/toc` — nested chapter/section tree
+- `POST /api/books/:slug/chapters` — create a chapter (`{ title, number? }`), appended after existing ones, with one empty top-level section titled after it
 - `GET /api/sections/:id` — a section's breadcrumbs, immediate children, and ordered content blocks
+- `POST /api/sections` — create a section (`{ chapter_id, parent_id?, title, markdown? }`); omit `parent_id` for a top-level section, pass it to nest under an existing section
 - `PUT /api/sections/:id` — replace a section's content from edited markdown (`{ markdown: "..." }`); re-parses and re-inserts its content_blocks
 - `GET /api/books/:slug/search?q=...` — full-text search (Postgres `tsvector`/`ts_rank`), ranked, with `ts_headline` snippets
 - `GET /api/books/:slug/glossary`, `GET /api/books/:slug/symbols`

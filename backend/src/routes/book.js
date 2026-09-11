@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool, resolveBookId } from "../db.js";
+import { slugify } from "../slugify.js";
 
 export const router = Router();
 
@@ -56,5 +57,52 @@ router.get("/books/:slug/toc", resolveBookId, async (req, res, next) => {
     res.json({ chapters: [...byChapter.values()] });
   } catch (err) {
     next(err);
+  }
+});
+
+// Creates a new chapter, appended after the book's existing chapters, along
+// with one empty top-level section titled after the chapter - every chapter
+// needs at least one section to be navigable/editable, mirroring how the
+// migration tool always gives a chapter its first section up front.
+router.post("/books/:slug/chapters", resolveBookId, async (req, res, next) => {
+  const { title, number } = req.body;
+  if (!title || typeof title !== "string") {
+    return res.status(400).json({ error: "title (string) is required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+
+    const {
+      rows: [{ next_order }],
+    } = await client.query(
+      "select coalesce(max(sort_order), -1) + 1 as next_order from chapters where book_id = $1",
+      [req.bookId]
+    );
+
+    const {
+      rows: [chapter],
+    } = await client.query(
+      `insert into chapters (book_id, number, slug, title, sort_order)
+       values ($1,$2,$3,$4,$5) returning *`,
+      [req.bookId, number || null, slugify(title), title, next_order]
+    );
+
+    const {
+      rows: [section],
+    } = await client.query(
+      `insert into sections (chapter_id, parent_id, numbering, title, depth, sort_order)
+       values ($1, null, null, $2, 1, 0) returning *`,
+      [chapter.id, title]
+    );
+
+    await client.query("commit");
+    res.status(201).json({ chapter, section });
+  } catch (err) {
+    await client.query("rollback");
+    next(err);
+  } finally {
+    client.release();
   }
 });

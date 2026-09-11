@@ -6,9 +6,9 @@ async function get(path) {
   return res.json();
 }
 
-async function put(path, body) {
+async function send(method, path, body) {
   const res = await fetch(`${API_URL}${path}`, {
-    method: "PUT",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -16,11 +16,17 @@ async function put(path, body) {
   return res.json();
 }
 
+const put = (path, body) => send("PUT", path, body);
+const post = (path, body) => send("POST", path, body);
+
 export const api = {
   books: () => get("/api/books"),
   book: (slug) => get(`/api/books/${slug}`),
   toc: (slug) => get(`/api/books/${slug}/toc`),
+  createChapter: (bookSlug, { title, number }) => post(`/api/books/${bookSlug}/chapters`, { title, number }),
   section: (id) => get(`/api/sections/${id}`),
+  createSection: ({ chapterId, parentId, title, markdown }) =>
+    post("/api/sections", { chapter_id: chapterId, parent_id: parentId, title, markdown }),
   updateSection: (id, markdown) => put(`/api/sections/${id}`, { markdown }),
   search: (slug, q) => get(`/api/books/${slug}/search?q=${encodeURIComponent(q)}`),
   glossary: (slug) => get(`/api/books/${slug}/glossary`),

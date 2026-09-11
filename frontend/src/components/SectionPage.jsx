@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { api } from "../api";
 import { blocksToMarkdown } from "../markdown";
@@ -8,6 +8,8 @@ import MarkdownEditor from "./MarkdownEditor";
 
 export default function SectionPage() {
   const { id, bookSlug } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -15,8 +17,17 @@ export default function SectionPage() {
   useEffect(() => {
     setData(null);
     setError(null);
-    setEditing(false);
     api.section(id).then(setData).catch((err) => setError(err.message));
+
+    // A section just created via the sidebar's "+" arrives here with
+    // autoEdit so it opens straight into the editor instead of showing an
+    // empty page first; consumed once so back/forward don't reopen it.
+    if (location.state?.autoEdit) {
+      setEditing(true);
+      navigate(location.pathname, { replace: true, state: null });
+    } else {
+      setEditing(false);
+    }
   }, [id]);
 
   if (error) return <p className="error">Couldn't load this section: {error}</p>;
