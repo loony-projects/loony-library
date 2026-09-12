@@ -436,6 +436,10 @@ blockquote {
   padding: 0;
 }
 
+.block-html {
+  margin: 1rem 0;
+}
+
 .section-children {
   margin-top: 2.5rem;
   padding-top: 1rem;

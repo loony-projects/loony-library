@@ -19,6 +19,17 @@ function blockToMarkdown(block) {
     return `${fence}${content.lang || ""}\n${content.code}\n${fence}`;
   }
 
+  if (block_type === "html") {
+    if (content.children) {
+      // A merged wrapper (see mergeHtmlWrappers in parseMarkdown.js) -
+      // reassemble it with the same blank-line separation the original
+      // source had, so re-parsing on save merges it back into one block
+      // instead of leaving the tags disconnected again.
+      return `${content.openTag}\n\n${blocksToMarkdown(content.children)}\n\n${content.closeTag}`;
+    }
+    return content.html;
+  }
+
   return content.markdown || content.text || "";
 }
 

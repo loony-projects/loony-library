@@ -47,7 +47,7 @@ erDiagram
     CONTENT_BLOCKS {
         uuid id PK
         uuid section_id FK
-        text block_type "paragraph|list|image|table|blockquote|subheading|code"
+        text block_type "paragraph|list|image|table|blockquote|subheading|code|html"
         int sort_order
         jsonb content
         tsvector tsv "generated, indexed"
