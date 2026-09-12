@@ -35,10 +35,12 @@ export default function SectionPage() {
 
   const { section, breadcrumbs, children, blocks } = data;
 
+  // Saving persists but doesn't leave the editor - see MarkdownEditor's own
+  // save/close split. Keep data.blocks in sync so the read view is current
+  // whenever the user does close it.
   async function handleSave(markdown) {
     const { blocks: newBlocks } = await api.updateSection(id, markdown);
     setData({ ...data, blocks: newBlocks });
-    setEditing(false);
   }
 
   return (

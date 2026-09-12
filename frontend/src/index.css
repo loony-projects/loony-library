@@ -822,10 +822,24 @@ blockquote {
 .md-editor-toolbar {
   flex-shrink: 0;
   display: flex;
-  gap: 0.15rem;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.4rem 1.25rem;
   background: var(--sidebar-bg);
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.md-editor-toolbar-group {
+  display: flex;
+  gap: 0.15rem;
+  padding-right: 0.5rem;
+  border-right: 1px solid var(--border);
+}
+
+.md-editor-toolbar-group:last-child {
+  padding-right: 0;
+  border-right: none;
 }
 
 .md-editor-body {

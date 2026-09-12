@@ -5,11 +5,16 @@ import { highlightCode } from "../highlight";
 import {
   Bold,
   Italic,
+  Strikethrough,
+  Code,
   Heading2,
   Quote,
   List,
   ListOrdered,
   Link2,
+  Image,
+  SquareCode,
+  Minus,
   Eye,
   EyeOff,
   X,
@@ -36,14 +41,34 @@ function applyLinePrefix(text, selectionStart, selectionEnd, prefix) {
   return { text: next, selectionStart: selectionStart + shift, selectionEnd: selectionEnd + shift };
 }
 
-const TOOLBAR = [
-  { icon: Bold, title: "Bold (Ctrl+B)", action: (t, s, e) => applyWrap(t, s, e, "**") },
-  { icon: Italic, title: "Italic (Ctrl+I)", action: (t, s, e) => applyWrap(t, s, e, "*") },
-  { icon: Heading2, title: "Heading", action: (t, s, e) => applyLinePrefix(t, s, e, "## ") },
-  { icon: Quote, title: "Quote", action: (t, s, e) => applyLinePrefix(t, s, e, "> ") },
-  { icon: List, title: "Bullet list", action: (t, s, e) => applyLinePrefix(t, s, e, "- ") },
-  { icon: ListOrdered, title: "Numbered list", action: (t, s, e) => applyLinePrefix(t, s, e, "1. ") },
-  { icon: Link2, title: "Link", action: (t, s, e) => applyWrap(t, s, e, "[", "](url)") },
+function applyInsertion(text, selectionStart, selectionEnd, insertion) {
+  const next = text.slice(0, selectionStart) + insertion + text.slice(selectionEnd);
+  const cursor = selectionStart + insertion.length;
+  return { text: next, selectionStart: cursor, selectionEnd: cursor };
+}
+
+// Grouped for the toolbar, with a visual separator between groups.
+const TOOLBAR_GROUPS = [
+  [
+    { icon: Bold, title: "Bold (Ctrl+B)", action: (t, s, e) => applyWrap(t, s, e, "**") },
+    { icon: Italic, title: "Italic (Ctrl+I)", action: (t, s, e) => applyWrap(t, s, e, "*") },
+    { icon: Strikethrough, title: "Strikethrough", action: (t, s, e) => applyWrap(t, s, e, "~~") },
+    { icon: Code, title: "Inline code", action: (t, s, e) => applyWrap(t, s, e, "`") },
+  ],
+  [
+    { icon: Heading2, title: "Heading", action: (t, s, e) => applyLinePrefix(t, s, e, "## ") },
+    { icon: Quote, title: "Quote", action: (t, s, e) => applyLinePrefix(t, s, e, "> ") },
+  ],
+  [
+    { icon: List, title: "Bullet list", action: (t, s, e) => applyLinePrefix(t, s, e, "- ") },
+    { icon: ListOrdered, title: "Numbered list", action: (t, s, e) => applyLinePrefix(t, s, e, "1. ") },
+  ],
+  [
+    { icon: Link2, title: "Link", action: (t, s, e) => applyWrap(t, s, e, "[", "](url)") },
+    { icon: Image, title: "Image", action: (t, s, e) => applyWrap(t, s, e, "![", "](url)") },
+    { icon: SquareCode, title: "Code block", action: (t, s, e) => applyWrap(t, s, e, "```\n", "\n```") },
+    { icon: Minus, title: "Horizontal rule", action: (t, s, e) => applyInsertion(t, s, e, "\n\n---\n\n") },
+  ],
 ];
 
 function wordCount(text) {
@@ -70,14 +95,22 @@ const previewMarked = new Marked({
  * raw markdown to the backend, which re-parses it into content_blocks
  * (backend/src/parseMarkdown.js) - this component only ever deals in plain
  * text.
+ *
+ * Save persists but never closes the editor - "dirty" is tracked against
+ * the last *saved* text, not the original initialValue, so Save correctly
+ * disables itself again right after saving instead of staying enabled
+ * forever. Closing (X / Esc) is the only way to leave, and only confirms
+ * when there's something newer than the last save to lose.
  */
 export default function MarkdownEditor({ title, initialValue, onSave, onCancel }) {
   const [text, setText] = useState(initialValue);
+  const [savedText, setSavedText] = useState(initialValue);
+  const [hasSavedOnce, setHasSavedOnce] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const textareaRef = useRef(null);
-  const dirty = text !== initialValue;
+  const dirty = text !== savedText;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -112,8 +145,11 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
     setError(null);
     try {
       await onSave(text);
+      setSavedText(text);
+      setHasSavedOnce(true);
     } catch (err) {
       setError(err.message);
+    } finally {
       setSaving(false);
     }
   }, [text, onSave]);
@@ -146,13 +182,13 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
   return (
     <div className="md-editor" onKeyDown={handleKeyDown}>
       <header className="md-editor-header">
-        <button type="button" className="md-editor-icon-button" title="Cancel (Esc)" onClick={requestCancel}>
+        <button type="button" className="md-editor-icon-button" title="Close (Esc)" onClick={requestCancel}>
           <X size={18} />
         </button>
         <div className="md-editor-heading">
           <span className="md-editor-title">{title}</span>
           <span className="md-editor-status">
-            {dirty ? "Unsaved changes" : "No changes"} · {wordCount(text)} words
+            {dirty ? "Unsaved changes" : hasSavedOnce ? "Saved" : "No changes"} · {wordCount(text)} words
           </span>
         </div>
         <div className="md-editor-header-actions">
@@ -173,16 +209,20 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
       </header>
 
       <div className="md-editor-toolbar">
-        {TOOLBAR.map((btn) => (
-          <button
-            key={btn.title}
-            type="button"
-            title={btn.title}
-            className="md-editor-icon-button"
-            onClick={() => runToolbarAction(btn.action)}
-          >
-            <btn.icon size={17} />
-          </button>
+        {TOOLBAR_GROUPS.map((group, i) => (
+          <div className="md-editor-toolbar-group" key={i}>
+            {group.map((btn) => (
+              <button
+                key={btn.title}
+                type="button"
+                title={btn.title}
+                className="md-editor-icon-button"
+                onClick={() => runToolbarAction(btn.action)}
+              >
+                <btn.icon size={17} />
+              </button>
+            ))}
+          </div>
         ))}
       </div>
 
