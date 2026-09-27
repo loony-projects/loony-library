@@ -1,3 +1,4 @@
+import { useDialog } from "./useDialog";
 import { useCallback, useRef, useState } from "react";
 import { Loader2, Plus, Upload, X } from "lucide-react";
 
@@ -80,55 +81,97 @@ export default function BookWizard({ onFinish, onCancel }) {
     }
   }
 
+  const dialogRef = useDialog(requestCancel);
+
   return (
-    <div className="dialog-overlay" onMouseDown={(e) => e.target === e.currentTarget && requestCancel()}>
-      <div
-        className="wizard"
-        onKeyDown={(e) => e.key === "Escape" && requestCancel()}
-      >
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="New book"
+      className="dialog-overlay"
+      onMouseDown={(e) => e.target === e.currentTarget && requestCancel()}
+    >
+      <div className="wizard">
         <div className="wizard-header">
           <h2 className="dialog-heading">New book</h2>
           <div className="wizard-steps">
-            <span className={`wizard-step${step === 1 ? " active" : ""}`}>1. Details</span>
-            <span className={`wizard-step${step === 2 ? " active" : ""}`}>2. Chapters</span>
+            <span className={`wizard-step${step === 1 ? " active" : ""}`}>
+              1. Details
+            </span>
+            <span className={`wizard-step${step === 2 ? " active" : ""}`}>
+              2. Chapters
+            </span>
           </div>
         </div>
 
         {step === 1 && (
           <div className="wizard-body">
-            <div className="wizard-cover-upload" onClick={() => fileInputRef.current?.click()}>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="Upload cover image"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              className="wizard-cover-upload"
+              onClick={() => fileInputRef.current?.click()}
+            >
               {coverPreview ? (
                 <img src={coverPreview} alt="Cover preview" />
               ) : (
                 <>
                   <Upload size={20} />
-                  <span>Drop cover image or click to upload</span>
+                  <span>Choose cover image</span>
                 </>
               )}
-              <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleCoverChange} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+                onChange={handleCoverChange}
+              />
             </div>
 
             <label className="dialog-label">
               Title *
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required />
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                autoFocus
+                required
+              />
             </label>
 
             <div className="wizard-field-grid">
               {METADATA_FIELDS.map((f) => (
                 <label className="dialog-label" key={f.key}>
                   {f.label}
-                  <input type="text" value={fields[f.key] || ""} onChange={(e) => setField(f.key, e.target.value)} />
+                  <input
+                    type="text"
+                    value={fields[f.key] || ""}
+                    onChange={(e) => setField(f.key, e.target.value)}
+                  />
                 </label>
               ))}
             </div>
 
-            {title.trim() && <p className="wizard-slug-preview">URL: /{slugPreview(title)}</p>}
+            {title.trim() && (
+              <p className="wizard-slug-preview">URL: /{slugPreview(title)}</p>
+            )}
           </div>
         )}
 
         {step === 2 && (
           <div className="wizard-body">
-            <p className="wizard-hint">Add your first chapter titles now, or skip and add them later.</p>
+            <p className="wizard-hint">
+              Add your first chapter titles now, or skip and add them later.
+            </p>
             <div className="wizard-chapter-input">
               <input
                 type="text"
@@ -143,7 +186,11 @@ export default function BookWizard({ onFinish, onCancel }) {
                 }}
                 autoFocus
               />
-              <button type="button" onClick={addChapter} disabled={!chapterInput.trim()}>
+              <button
+                type="button"
+                onClick={addChapter}
+                disabled={!chapterInput.trim()}
+              >
                 <Plus size={16} />
               </button>
             </div>
@@ -169,22 +216,43 @@ export default function BookWizard({ onFinish, onCancel }) {
         <div className="dialog-actions">
           {step === 1 && (
             <>
-              <button type="button" className="dialog-cancel" onClick={requestCancel}>
+              <button
+                type="button"
+                className="dialog-cancel"
+                onClick={requestCancel}
+              >
                 Cancel
               </button>
-              <button type="button" className="dialog-submit" disabled={!title.trim()} onClick={() => setStep(2)}>
+              <button
+                type="button"
+                className="dialog-submit"
+                disabled={!title.trim()}
+                onClick={() => setStep(2)}
+              >
                 Next
               </button>
             </>
           )}
           {step === 2 && (
             <>
-              <button type="button" className="dialog-cancel" onClick={() => setStep(1)} disabled={saving}>
+              <button
+                type="button"
+                className="dialog-cancel"
+                onClick={() => setStep(1)}
+                disabled={saving}
+              >
                 Back
               </button>
-              <button type="button" className="dialog-submit" onClick={finish} disabled={saving}>
+              <button
+                type="button"
+                className="dialog-submit"
+                onClick={finish}
+                disabled={saving}
+              >
                 {saving && <Loader2 size={14} className="md-spin" />}
-                {saving ? "Creating…" : `Create book${chapters.length ? ` (${chapters.length} chapters)` : ""}`}
+                {saving
+                  ? "Creating…"
+                  : `Create book${chapters.length ? ` (${chapters.length} chapters)` : ""}`}
               </button>
             </>
           )}

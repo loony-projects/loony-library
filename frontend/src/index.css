@@ -555,7 +555,10 @@ blockquote {
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .library-card:hover {
@@ -1184,4 +1187,178 @@ blockquote {
   .wizard-field-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Account, discovery and reading controls share the book's palette. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #181a1d;
+  --sidebar-bg: #22252a;
+  --border: #44484f;
+  --text: #e8e5df;
+  --muted: #b5afa4;
+  --accent: #efb18e;
+  --accent-bg: #3c3029;
+}
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  background: var(--sidebar-bg);
+}
+.panel summary,
+.preferences summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.panel label,
+.account label,
+.preferences label,
+.filters label {
+  display: block;
+  margin: 0.6rem 0;
+}
+.panel input:not([type="checkbox"]),
+.panel textarea,
+.panel select,
+.account input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+button,
+select,
+input,
+textarea {
+  font: inherit;
+}
+.panel button,
+.account button,
+.print-chapter button {
+  margin: 0.2rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+.filters {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+.filters select {
+  display: block;
+  padding: 0.4rem;
+}
+.account {
+  font-size: 0.85rem;
+  margin-bottom: 0.7rem;
+}
+.preferences {
+  margin: 0.8rem 0;
+  font-size: 0.9rem;
+}
+.section-content {
+  font-size: var(--reading-size, 18px);
+  line-height: var(--reading-spacing, 1.7);
+}
+.section-navigation {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  border-top: 1px solid var(--border);
+  padding: 2rem 0;
+}
+.is-reader .toc-row-actions {
+  display: none;
+}
+.toc-row:focus-within .toc-row-actions {
+  opacity: 1;
+}
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 1rem;
+  z-index: 1000;
+  padding: 1rem;
+  background: var(--bg);
+}
+.skip-link:focus {
+  top: 0;
+}
+.print-chapter {
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+.upload-image {
+  font-size: 0.8rem;
+}
+.upload-image input {
+  max-width: 200px;
+}
+@media (max-width: 700px) {
+  .layout {
+    display: block;
+  }
+  .sidebar {
+    width: 100% !important;
+    position: static;
+    height: auto;
+    max-height: 45vh;
+  }
+  .sidebar-resizer {
+    display: none;
+  }
+  .content {
+    padding: 1rem;
+  }
+}
+@media print {
+  :root {
+    --bg: white;
+    --text: black;
+    --muted: #333;
+    --accent: black;
+  }
+  .no-print,
+  .sidebar,
+  .sidebar-resizer,
+  .skip-link,
+  .section-edit-button {
+    display: none !important;
+  }
+  .layout {
+    display: block;
+  }
+  .content,
+  .print-chapter {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+  pre {
+    white-space: pre-wrap;
+  }
+  img {
+    max-width: 100%;
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}
+::highlight(saved-notes) {
+  background: #f9df7c;
+  color: #24211a;
 }

@@ -1,3 +1,4 @@
+import { useDialog } from "./useDialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -8,7 +9,13 @@ import { Loader2 } from "lucide-react";
  * Library.jsx), so this dialog stays minimal: a title, plus one optional
  * extra field the caller can ask for (a chapter's number, a book's author).
  */
-export default function NewItemDialog({ heading, extraField, onCreate, onCancel }) {
+export default function NewItemDialog({
+  heading,
+  extraField,
+  onCreate,
+  onCancel,
+}) {
+  const dialogRef = useDialog(onCancel);
   const [title, setTitle] = useState("");
   const [extraValue, setExtraValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -28,19 +35,31 @@ export default function NewItemDialog({ heading, extraField, onCreate, onCancel 
       try {
         await onCreate({
           title: title.trim(),
-          ...(extraField && { [extraField.key]: extraValue.trim() || undefined }),
+          ...(extraField && {
+            [extraField.key]: extraValue.trim() || undefined,
+          }),
         });
       } catch (err) {
         setError(err.message);
         setSaving(false);
       }
     },
-    [title, extraValue, extraField, onCreate]
+    [title, extraValue, extraField, onCreate],
   );
 
   return (
-    <div className="dialog-overlay" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <form className="dialog" onSubmit={submit}>
+    <div
+      className="dialog-overlay"
+      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <form
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={heading}
+        className="dialog"
+        onSubmit={submit}
+      >
         <h2 className="dialog-heading">{heading}</h2>
         <label className="dialog-label">
           Title
@@ -49,22 +68,35 @@ export default function NewItemDialog({ heading, extraField, onCreate, onCancel 
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && onCancel()}
             required
           />
         </label>
         {extraField && (
           <label className="dialog-label">
-            {extraField.label} <span className="dialog-optional">(optional)</span>
-            <input type="text" value={extraValue} onChange={(e) => setExtraValue(e.target.value)} />
+            {extraField.label}{" "}
+            <span className="dialog-optional">(optional)</span>
+            <input
+              type="text"
+              value={extraValue}
+              onChange={(e) => setExtraValue(e.target.value)}
+            />
           </label>
         )}
         {error && <p className="dialog-error">{error}</p>}
         <div className="dialog-actions">
-          <button type="button" className="dialog-cancel" onClick={onCancel} disabled={saving}>
+          <button
+            type="button"
+            className="dialog-cancel"
+            onClick={onCancel}
+            disabled={saving}
+          >
             Cancel
           </button>
-          <button type="submit" className="dialog-submit" disabled={saving || !title.trim()}>
+          <button
+            type="submit"
+            className="dialog-submit"
+            disabled={saving || !title.trim()}
+          >
             {saving && <Loader2 size={14} className="md-spin" />}
             {saving ? "Creating…" : "Create"}
           </button>

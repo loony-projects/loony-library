@@ -1,5 +1,15 @@
+import Account, { useAccount } from "./Account";
+import { Preferences } from "./ReadingTools";
+import BookDetails from "./BookDetails";
+import OutlineEditor from "./OutlineEditor";
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { Plus } from "lucide-react";
 import { api } from "../api";
 import TocTree from "./TocTree";
@@ -30,7 +40,8 @@ const SIDEBAR_WIDTH_KEY = "loony-library-sidebar-width";
 function readStoredWidth() {
   try {
     const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    if (stored >= MIN_SIDEBAR_WIDTH && stored <= MAX_SIDEBAR_WIDTH) return stored;
+    if (stored >= MIN_SIDEBAR_WIDTH && stored <= MAX_SIDEBAR_WIDTH)
+      return stored;
   } catch {
     // localStorage unavailable (private mode, etc.) - fall through to default
   }
@@ -39,6 +50,12 @@ function readStoredWidth() {
 
 export default function Layout() {
   const { bookSlug } = useParams();
+  const { editor, user } = useAccount();
+  async function refresh() {
+    const [d, t] = await Promise.all([api.books(), api.toc(bookSlug)]);
+    setBook(d.books.find((b) => b.slug === bookSlug));
+    setToc(t);
+  }
   const navigate = useNavigate();
   const location = useLocation();
   const [book, setBook] = useState(null);
@@ -53,13 +70,16 @@ export default function Layout() {
     setBook(null);
     setToc(null);
     setError(null);
-    Promise.all([api.book(bookSlug), api.toc(bookSlug)])
+    Promise.all([
+      api.books().then((d) => d.books.find((b) => b.slug === bookSlug)),
+      api.toc(bookSlug),
+    ])
       .then(([book, toc]) => {
         setBook(book);
         setToc(toc);
       })
       .catch((err) => setError(err.message));
-  }, [bookSlug]);
+  }, [bookSlug, user]);
 
   async function handleCreate({ title, number }) {
     let sectionId;
@@ -77,7 +97,9 @@ export default function Layout() {
     const freshToc = await api.toc(bookSlug);
     setToc(freshToc);
     setCreating(null);
-    navigate(`/${bookSlug}/sections/${sectionId}`, { state: { autoEdit: true } });
+    navigate(`/${bookSlug}/sections/${sectionId}`, {
+      state: { autoEdit: true },
+    });
   }
 
   // After a delete, the section currently being viewed may no longer exist -
@@ -92,7 +114,11 @@ export default function Layout() {
   }
 
   async function handleDeleteChapter(chapterId, title) {
-    if (!window.confirm(`Delete chapter "${title}"? This deletes everything inside it and can't be undone.`)) {
+    if (
+      !window.confirm(
+        `Delete chapter "${title}"? This deletes everything inside it and can't be undone.`,
+      )
+    ) {
       return;
     }
     try {
@@ -104,7 +130,11 @@ export default function Layout() {
   }
 
   async function handleDeleteSection(sectionId, title) {
-    if (!window.confirm(`Delete "${title}"? This deletes everything inside it and can't be undone.`)) {
+    if (
+      !window.confirm(
+        `Delete "${title}"? This deletes everything inside it and can't be undone.`,
+      )
+    ) {
       return;
     }
     try {
@@ -118,7 +148,10 @@ export default function Layout() {
   useEffect(() => {
     function onMouseMove(e) {
       if (!draggingRef.current) return;
-      const next = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, e.clientX));
+      const next = Math.min(
+        MAX_SIDEBAR_WIDTH,
+        Math.max(MIN_SIDEBAR_WIDTH, e.clientX),
+      );
       widthRef.current = next;
       setSidebarWidth(next);
     }
@@ -146,8 +179,13 @@ export default function Layout() {
   }
 
   return (
-    <div className="layout">
+    <div className={`layout ${editor ? "is-editor" : "is-reader"}`}>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <aside className="sidebar" style={{ width: sidebarWidth }}>
+        <Account />
+        <Preferences />
         <div className="sidebar-header">
           <Link to="/" className="library-link">
             ← Library
@@ -160,19 +198,29 @@ export default function Layout() {
           </Link>
         </div>
         <SearchBox />
-        {error && <p className="error">Couldn't load the table of contents: {error}</p>}
+        {error && (
+          <p className="error">Couldn't load the table of contents: {error}</p>
+        )}
         {toc && (
           <TocTree
             chapters={toc.chapters}
-            onAddSection={(chapterId) => setCreating({ type: "section", chapterId, parentId: null })}
-            onAddSubsection={(chapterId, parentId) => setCreating({ type: "section", chapterId, parentId })}
+            onAddSection={(chapterId) =>
+              setCreating({ type: "section", chapterId, parentId: null })
+            }
+            onAddSubsection={(chapterId, parentId) =>
+              setCreating({ type: "section", chapterId, parentId })
+            }
             onDeleteChapter={handleDeleteChapter}
             onDeleteSection={handleDeleteSection}
           />
         )}
         {!toc && !error && <p className="loading">Loading contents…</p>}
-        {toc && (
-          <button type="button" className="add-chapter-button" onClick={() => setCreating({ type: "chapter" })}>
+        {toc && editor && (
+          <button
+            type="button"
+            className="add-chapter-button"
+            onClick={() => setCreating({ type: "chapter" })}
+          >
             <Plus size={14} />
             New chapter
           </button>
@@ -184,14 +232,41 @@ export default function Layout() {
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize navigation"
+        tabIndex={0}
+        aria-valuemin={MIN_SIDEBAR_WIDTH}
+        aria-valuemax={MAX_SIDEBAR_WIDTH}
+        aria-valuenow={sidebarWidth}
+        onKeyDown={(e) => {
+          if (["ArrowLeft", "ArrowRight"].includes(e.key)) {
+            e.preventDefault();
+            const w = Math.max(
+              MIN_SIDEBAR_WIDTH,
+              Math.min(
+                MAX_SIDEBAR_WIDTH,
+                sidebarWidth + (e.key === "ArrowRight" ? 20 : -20),
+              ),
+            );
+            setSidebarWidth(w);
+            widthRef.current = w;
+            try {
+              localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w));
+            } catch {}
+          }
+        }}
       />
-      <main className="content">
-        <Outlet />
+      <main className="content" id="main-content" tabIndex={-1}>
+        {book && <BookDetails book={book} refresh={refresh} />}
+        {editor && toc && <OutlineEditor toc={toc} refresh={refresh} />}
+        <Outlet context={{ toc, refresh }} />
       </main>
       {creating && (
         <NewItemDialog
           heading={creating.type === "chapter" ? "New chapter" : "New section"}
-          extraField={creating.type === "chapter" ? { key: "number", label: "Number" } : undefined}
+          extraField={
+            creating.type === "chapter"
+              ? { key: "number", label: "Number" }
+              : undefined
+          }
           onCreate={handleCreate}
           onCancel={() => setCreating(null)}
         />

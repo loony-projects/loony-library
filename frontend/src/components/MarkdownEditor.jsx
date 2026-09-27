@@ -1,3 +1,5 @@
+import { useDialog } from "./useDialog";
+import { api } from "../api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Marked } from "marked";
 import DOMPurify from "dompurify";
@@ -26,7 +28,12 @@ import {
 // normal rich-text editor instead of blindly inserting at the cursor.
 function applyWrap(text, selectionStart, selectionEnd, before, after = before) {
   const selected = text.slice(selectionStart, selectionEnd);
-  const next = text.slice(0, selectionStart) + before + selected + after + text.slice(selectionEnd);
+  const next =
+    text.slice(0, selectionStart) +
+    before +
+    selected +
+    after +
+    text.slice(selectionEnd);
   return {
     text: next,
     selectionStart: selectionStart + before.length,
@@ -38,11 +45,16 @@ function applyLinePrefix(text, selectionStart, selectionEnd, prefix) {
   const lineStart = text.lastIndexOf("\n", selectionStart - 1) + 1;
   const next = text.slice(0, lineStart) + prefix + text.slice(lineStart);
   const shift = prefix.length;
-  return { text: next, selectionStart: selectionStart + shift, selectionEnd: selectionEnd + shift };
+  return {
+    text: next,
+    selectionStart: selectionStart + shift,
+    selectionEnd: selectionEnd + shift,
+  };
 }
 
 function applyInsertion(text, selectionStart, selectionEnd, insertion) {
-  const next = text.slice(0, selectionStart) + insertion + text.slice(selectionEnd);
+  const next =
+    text.slice(0, selectionStart) + insertion + text.slice(selectionEnd);
   const cursor = selectionStart + insertion.length;
   return { text: next, selectionStart: cursor, selectionEnd: cursor };
 }
@@ -50,24 +62,72 @@ function applyInsertion(text, selectionStart, selectionEnd, insertion) {
 // Grouped for the toolbar, with a visual separator between groups.
 const TOOLBAR_GROUPS = [
   [
-    { icon: Bold, title: "Bold (Ctrl+B)", action: (t, s, e) => applyWrap(t, s, e, "**") },
-    { icon: Italic, title: "Italic (Ctrl+I)", action: (t, s, e) => applyWrap(t, s, e, "*") },
-    { icon: Strikethrough, title: "Strikethrough", action: (t, s, e) => applyWrap(t, s, e, "~~") },
-    { icon: Code, title: "Inline code", action: (t, s, e) => applyWrap(t, s, e, "`") },
+    {
+      icon: Bold,
+      title: "Bold (Ctrl+B)",
+      action: (t, s, e) => applyWrap(t, s, e, "**"),
+    },
+    {
+      icon: Italic,
+      title: "Italic (Ctrl+I)",
+      action: (t, s, e) => applyWrap(t, s, e, "*"),
+    },
+    {
+      icon: Strikethrough,
+      title: "Strikethrough",
+      action: (t, s, e) => applyWrap(t, s, e, "~~"),
+    },
+    {
+      icon: Code,
+      title: "Inline code",
+      action: (t, s, e) => applyWrap(t, s, e, "`"),
+    },
   ],
   [
-    { icon: Heading2, title: "Heading", action: (t, s, e) => applyLinePrefix(t, s, e, "## ") },
-    { icon: Quote, title: "Quote", action: (t, s, e) => applyLinePrefix(t, s, e, "> ") },
+    {
+      icon: Heading2,
+      title: "Heading",
+      action: (t, s, e) => applyLinePrefix(t, s, e, "## "),
+    },
+    {
+      icon: Quote,
+      title: "Quote",
+      action: (t, s, e) => applyLinePrefix(t, s, e, "> "),
+    },
   ],
   [
-    { icon: List, title: "Bullet list", action: (t, s, e) => applyLinePrefix(t, s, e, "- ") },
-    { icon: ListOrdered, title: "Numbered list", action: (t, s, e) => applyLinePrefix(t, s, e, "1. ") },
+    {
+      icon: List,
+      title: "Bullet list",
+      action: (t, s, e) => applyLinePrefix(t, s, e, "- "),
+    },
+    {
+      icon: ListOrdered,
+      title: "Numbered list",
+      action: (t, s, e) => applyLinePrefix(t, s, e, "1. "),
+    },
   ],
   [
-    { icon: Link2, title: "Link", action: (t, s, e) => applyWrap(t, s, e, "[", "](url)") },
-    { icon: Image, title: "Image", action: (t, s, e) => applyWrap(t, s, e, "![", "](url)") },
-    { icon: SquareCode, title: "Code block", action: (t, s, e) => applyWrap(t, s, e, "```\n", "\n```") },
-    { icon: Minus, title: "Horizontal rule", action: (t, s, e) => applyInsertion(t, s, e, "\n\n---\n\n") },
+    {
+      icon: Link2,
+      title: "Link",
+      action: (t, s, e) => applyWrap(t, s, e, "[", "](url)"),
+    },
+    {
+      icon: Image,
+      title: "Image",
+      action: (t, s, e) => applyWrap(t, s, e, "![", "](url)"),
+    },
+    {
+      icon: SquareCode,
+      title: "Code block",
+      action: (t, s, e) => applyWrap(t, s, e, "```\n", "\n```"),
+    },
+    {
+      icon: Minus,
+      title: "Horizontal rule",
+      action: (t, s, e) => applyInsertion(t, s, e, "\n\n---\n\n"),
+    },
   ],
 ];
 
@@ -102,7 +162,12 @@ const previewMarked = new Marked({
  * forever. Closing (X / Esc) is the only way to leave, and only confirms
  * when there's something newer than the last save to lose.
  */
-export default function MarkdownEditor({ title, initialValue, onSave, onCancel }) {
+export default function MarkdownEditor({
+  title,
+  initialValue,
+  onSave,
+  onCancel,
+}) {
   const [text, setText] = useState(initialValue);
   const [savedText, setSavedText] = useState(initialValue);
   const [hasSavedOnce, setHasSavedOnce] = useState(false);
@@ -126,6 +191,8 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
     onCancel();
   }, [dirty, onCancel]);
 
+  const dialogRef = useDialog(requestCancel);
+
   const runToolbarAction = useCallback(
     (action) => {
       const el = textareaRef.current;
@@ -137,7 +204,7 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
         el.setSelectionRange(result.selectionStart, result.selectionEnd);
       });
     },
-    [text]
+    [text],
   );
 
   const handleSave = useCallback(async () => {
@@ -166,29 +233,50 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
       } else if (mod && e.key === "i") {
         e.preventDefault();
         runToolbarAction((t, s, en) => applyWrap(t, s, en, "*"));
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        requestCancel();
       }
     },
-    [handleSave, runToolbarAction, requestCancel]
+    [handleSave, runToolbarAction],
   );
 
   const previewHtml = useMemo(
-    () => (showPreview ? DOMPurify.sanitize(previewMarked.parse(text)) : null),
-    [showPreview, text]
+    () =>
+      showPreview
+        ? DOMPurify.sanitize(
+            previewMarked.parse(
+              text.replace(
+                /!\[([^\]]*)\]\(([^)]+)\)/g,
+                (_, alt, src) =>
+                  `![${alt}](${/^https?:/.test(src) ? src : api.imageUrl(src)})`,
+              ),
+            ),
+          )
+        : null,
+    [showPreview, text],
   );
 
   return (
-    <div className="md-editor" onKeyDown={handleKeyDown}>
+    <div
+      ref={dialogRef}
+      className="md-editor"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Edit ${title}`}
+      onKeyDown={handleKeyDown}
+    >
       <header className="md-editor-header">
-        <button type="button" className="md-editor-icon-button" title="Close (Esc)" onClick={requestCancel}>
+        <button
+          type="button"
+          className="md-editor-icon-button"
+          title="Close (Esc)"
+          onClick={requestCancel}
+        >
           <X size={18} />
         </button>
         <div className="md-editor-heading">
           <span className="md-editor-title">{title}</span>
           <span className="md-editor-status">
-            {dirty ? "Unsaved changes" : hasSavedOnce ? "Saved" : "No changes"} · {wordCount(text)} words
+            {dirty ? "Unsaved changes" : hasSavedOnce ? "Saved" : "No changes"}{" "}
+            · {wordCount(text)} words
           </span>
         </div>
         <div className="md-editor-header-actions">
@@ -201,14 +289,40 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
             {showPreview ? <EyeOff size={16} /> : <Eye size={16} />}
             Preview
           </button>
-          <button type="button" className="md-editor-save" onClick={handleSave} disabled={saving || !dirty}>
+          <button
+            type="button"
+            className="md-editor-save"
+            onClick={handleSave}
+            disabled={saving || !dirty}
+          >
             {saving && <Loader2 size={15} className="md-spin" />}
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : "Save draft"}
           </button>
         </div>
       </header>
 
       <div className="md-editor-toolbar">
+        <label className="upload-image">
+          Upload image
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={async (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              const form = new FormData();
+              form.append("image", file);
+              try {
+                const d = await api.postForm("/api/images", form);
+                runToolbarAction((t, s, en) =>
+                  applyInsertion(t, s, en, `![Image description](${d.path})`),
+                );
+              } catch (e) {
+                setError(e.message);
+              }
+            }}
+          />
+        </label>
         {TOOLBAR_GROUPS.map((group, i) => (
           <div className="md-editor-toolbar-group" key={i}>
             {group.map((btn) => (
@@ -216,6 +330,7 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
                 key={btn.title}
                 type="button"
                 title={btn.title}
+                aria-label={btn.title}
                 className="md-editor-icon-button"
                 onClick={() => runToolbarAction(btn.action)}
               >
@@ -226,8 +341,11 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
         ))}
       </div>
 
-      <div className={`md-editor-body${showPreview ? " md-editor-body--split" : ""}`}>
+      <div
+        className={`md-editor-body${showPreview ? " md-editor-body--split" : ""}`}
+      >
         <textarea
+          aria-label="Section Markdown"
           ref={textareaRef}
           className="md-editor-textarea"
           value={text}
@@ -235,7 +353,10 @@ export default function MarkdownEditor({ title, initialValue, onSave, onCancel }
           spellCheck="false"
         />
         {showPreview && (
-          <div className="md-editor-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          <div
+            className="md-editor-preview"
+            dangerouslySetInnerHTML={{ __html: previewHtml }}
+          />
         )}
       </div>
     </div>

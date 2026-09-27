@@ -9,17 +9,31 @@ import { renderBlock, renderInline } from "../renderMarkdown";
 // search) instead of the flattened plain text, so what's on the page
 // matches what the editor's live preview already showed while writing it.
 function Paragraph({ content }) {
-  return <p dangerouslySetInnerHTML={{ __html: renderInline(content.markdown || content.text) }} />;
+  return (
+    <p
+      dangerouslySetInnerHTML={{
+        __html: renderInline(content.markdown || content.text),
+      }}
+    />
+  );
 }
 
 function ListBlock({ content }) {
-  return <div className="block-list" dangerouslySetInnerHTML={{ __html: renderBlock(content.markdown) }} />;
+  return (
+    <div
+      className="block-list"
+      dangerouslySetInnerHTML={{ __html: renderBlock(content.markdown) }}
+    />
+  );
 }
 
 function ImageBlock({ content }) {
   return (
     <figure className="block-image">
-      <img src={api.imageUrl(content.src)} alt={content.alt || content.caption || ""} />
+      <img
+        src={api.imageUrl(content.src)}
+        alt={content.alt || content.caption || ""}
+      />
       {content.caption && <figcaption>{content.caption}</figcaption>}
     </figure>
   );
@@ -27,19 +41,30 @@ function ImageBlock({ content }) {
 
 function TableBlock({ content }) {
   return (
-    <div className="block-table-wrap" dangerouslySetInnerHTML={{ __html: renderBlock(content.markdown) }} />
+    <div
+      className="block-table-wrap"
+      dangerouslySetInnerHTML={{ __html: renderBlock(content.markdown) }}
+    />
   );
 }
 
 function BlockquoteBlock({ content }) {
-  return <div className="block-blockquote" dangerouslySetInnerHTML={{ __html: renderBlock(content.markdown) }} />;
+  return (
+    <div
+      className="block-blockquote"
+      dangerouslySetInnerHTML={{ __html: renderBlock(content.markdown) }}
+    />
+  );
 }
 
 function CodeBlock({ content }) {
   const { html, language } = highlightCode(content.code, content.lang);
   return (
     <pre className="block-code">
-      <code className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: html }} />
+      <code
+        className={`hljs language-${language}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </pre>
   );
 }
@@ -62,7 +87,12 @@ function parseStyleAttribute(styleStr) {
 
 // A handful of HTML attributes React exposes under a different prop name
 // than the one authors actually write.
-const ATTR_TO_PROP = { class: "className", for: "htmlFor", tabindex: "tabIndex", readonly: "readOnly" };
+const ATTR_TO_PROP = {
+  class: "className",
+  for: "htmlFor",
+  tabindex: "tabIndex",
+  readonly: "readOnly",
+};
 
 // Sanitizes the wrapper's own opening/closing tag (its attributes are
 // otherwise never checked - only each child block sanitizes its own
@@ -71,7 +101,8 @@ const ATTR_TO_PROP = { class: "className", for: "htmlFor", tabindex: "tabIndex",
 // browser's own HTML parser rather than hand-rolled attribute parsing.
 function sanitizeWrapperTag(openTag, closeTag) {
   const clean = DOMPurify.sanitize(`${openTag}${closeTag}`);
-  const el = new DOMParser().parseFromString(clean, "text/html").body.firstElementChild;
+  const el = new DOMParser().parseFromString(clean, "text/html").body
+    .firstElementChild;
   if (!el) return null; // DOMPurify rejected the tag entirely (e.g. <script>)
   const props = {};
   for (const attr of el.attributes) {
@@ -91,7 +122,8 @@ function sanitizeWrapperTag(openTag, closeTag) {
 // render exactly as they would as top-level blocks.
 function HtmlWrapperBlock({ content }) {
   const parsed = sanitizeWrapperTag(content.openTag, content.closeTag);
-  if (!parsed) return content.children.map((child, i) => <Block key={i} block={child} />);
+  if (!parsed)
+    return content.children.map((child, i) => <Block key={i} block={child} />);
   const Tag = parsed.tagName;
   return (
     <Tag {...parsed.props}>
@@ -108,7 +140,12 @@ function HtmlWrapperBlock({ content }) {
 // the editing user's browser).
 function HtmlBlock({ content }) {
   if (content.children) return <HtmlWrapperBlock content={content} />;
-  return <div className="block-html" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content.html) }} />;
+  return (
+    <div
+      className="block-html"
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content.html) }}
+    />
+  );
 }
 
 // An in-book heading that isn't a real document section (e.g. "a) Adding

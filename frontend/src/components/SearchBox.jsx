@@ -49,7 +49,8 @@ export default function SearchBox() {
             <li key={r.section_id}>
               <button onMouseDown={() => goTo(r.section_id)}>
                 <div className="search-result-title">
-                  {r.chapter_title} {r.numbering ? `– ${r.numbering} ${r.title}` : ""}
+                  {r.chapter_title}{" "}
+                  {r.numbering ? `– ${r.numbering} ${r.title}` : ""}
                 </div>
                 <div
                   className="search-result-snippet"
