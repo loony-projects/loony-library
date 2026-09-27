@@ -80,6 +80,7 @@ export const api = {
     edition,
     published_year,
     price,
+    category_id,
     coverFile,
   }) => {
     const form = new FormData();
@@ -91,12 +92,15 @@ export const api = {
       edition,
       published_year,
       price,
+      category_id,
     })) {
       if (value) form.append(key, value);
     }
     if (coverFile) form.append("cover", coverFile);
     return postForm("/api/books", form);
   },
+  categories: () => get("/api/categories"),
+  createCategory: ({ name, parent_id }) => post("/api/categories", { name, parent_id }),
   toc: (slug) => get(`/api/books/${slug}/toc`),
   createChapter: (bookSlug, { title, number }) =>
     post(`/api/books/${bookSlug}/chapters`, { title, number }),

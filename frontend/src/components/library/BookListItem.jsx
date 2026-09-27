@@ -36,11 +36,9 @@ export default function BookListItem({ book, shelf, reading }) {
             {details.join(" · ")}
           </p>
         )}
-        {book.genres?.length > 0 && (
+        {book.category_name && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {book.genres.map((g) => (
-              <Badge key={g} variant="outline">{g}</Badge>
-            ))}
+            <Badge variant="outline">{book.category_name}</Badge>
           </div>
         )}
       </div>

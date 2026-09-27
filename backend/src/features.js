@@ -41,7 +41,12 @@ r.get(
   "/discover",
   wrap(async (req, res) => {
     const { rows } = await pool.query(
-      `select b.*,coalesce((select jsonb_agg(a order by a.name) from authors a join book_authors ba on ba.author_id=a.id where ba.book_id=b.id),'[]') authors,(select count(*)::int from chapters where book_id=b.id) chapter_count from books b where b.status='published' or $1 order by b.title`,
+      `select b.*,cat.slug category_slug,cat.name category_name,parent_cat.id category_parent_id,parent_cat.slug category_parent_slug,parent_cat.name category_parent_name,
+              coalesce((select jsonb_agg(a order by a.name) from authors a join book_authors ba on ba.author_id=a.id where ba.book_id=b.id),'[]') authors,(select count(*)::int from chapters where book_id=b.id) chapter_count
+       from books b
+       left join categories cat on cat.id=b.category_id
+       left join categories parent_cat on parent_cat.id=cat.parent_id
+       where b.status='published' or $1 order by b.title`,
       [req.user?.role === "editor"],
     );
     res.json({
@@ -106,7 +111,7 @@ r.patch(
       title,
       author_names = [],
       language = "und",
-      genres = [],
+      category_id = null,
       series = null,
       volume = null,
       status = "draft",
@@ -116,8 +121,6 @@ r.patch(
       !title.trim() ||
       !Array.isArray(author_names) ||
       author_names.some((n) => typeof n !== "string" || !n.trim()) ||
-      !Array.isArray(genres) ||
-      genres.some((g) => typeof g !== "string") ||
       typeof language !== "string" ||
       !language.trim() ||
       !["draft", "published"].includes(status) ||
@@ -125,6 +128,10 @@ r.patch(
         (!Number.isFinite(Number(volume)) || Number(volume) <= 0))
     )
       throw fail("Invalid book metadata");
+    if (category_id != null) {
+      const { rows } = await pool.query("select id from categories where id=$1", [category_id]);
+      if (!rows.length) throw fail("Unknown category");
+    }
     const metadata = ["publisher", "isbn", "edition", "price"];
     for (const key of metadata)
       if (req.body[key] != null && typeof req.body[key] !== "string")
@@ -139,13 +146,13 @@ r.patch(
     try {
       await client.query("begin");
       const { rows } = await client.query(
-        "update books set title=$2,author=$3,language=$4,genres=$5,series=$6,volume=$7,status=$8 where slug=$1 returning *",
+        "update books set title=$2,author=$3,language=$4,category_id=$5,series=$6,volume=$7,status=$8 where slug=$1 returning *",
         [
           req.params.slug,
           title.trim(),
           author_names.join(", "),
           language,
-          genres,
+          category_id,
           series,
           volume,
           status,

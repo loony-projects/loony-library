@@ -6,6 +6,7 @@ import { useAccount } from "./Account";
 import { formatLanguage, initials, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import BookCover from "./library/BookCover";
+import CategoryPicker from "./library/CategoryPicker";
 import { InlineMessage } from "./common/States";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -95,7 +96,6 @@ function BookDetailsBody({ book, refresh }) {
       ...book,
       author_names:
         (book.authors || []).map((a) => a.name).join("; ") || book.author || "",
-      genres: (book.genres || []).join(", "),
     });
     api
       .get(`/api/books/${book.slug}/reviews`)
@@ -138,6 +138,7 @@ function BookDetailsBody({ book, refresh }) {
     ["ISBN", book.isbn],
     ["Language", formatLanguage(book.language)],
     ["Series", book.series && `${book.series}${book.volume ? `, volume ${book.volume}` : ""}`],
+    ["Category", book.category_name && (book.category_parent_name ? `${book.category_parent_name} / ${book.category_name}` : book.category_name)],
     ["Contents", book.chapter_count > 0 && plural(book.chapter_count, "chapter")],
   ].filter(([, v]) => v);
 
@@ -168,8 +169,10 @@ function BookDetailsBody({ book, refresh }) {
                 ))
               : book.author}
           </p>
-          {book.genres?.length > 0 && (
-            <p className="mt-2 text-[13px] text-muted-foreground">{book.genres.join(" · ")}</p>
+          {book.category_name && (
+            <p className="mt-2 text-[13px] text-muted-foreground">
+              {book.category_parent_name ? `${book.category_parent_name} · ${book.category_name}` : book.category_name}
+            </p>
           )}
           {book.status === "draft" && (
             <span className="mt-3 inline-block rounded-full bg-secondary px-2 py-0.5 text-[11.5px] font-medium text-muted-foreground">
@@ -320,10 +323,6 @@ function BookDetailsBody({ book, refresh }) {
                         .split(";")
                         .map((x) => x.trim())
                         .filter(Boolean),
-                      genres: form.genres
-                        .split(",")
-                        .map((x) => x.trim())
-                        .filter(Boolean),
                       volume: form.volume ? Number(form.volume) : null,
                     });
                     await refresh();
@@ -345,7 +344,10 @@ function BookDetailsBody({ book, refresh }) {
                   {field("series", "Series")}
                   {field("volume", "Volume")}
                 </div>
-                {field("genres", "Genres", { hint: "Comma separated." })}
+                <CategoryPicker
+                  value={form.category_id}
+                  onChange={(category_id) => setForm({ ...form, category_id })}
+                />
                 <Field label="Publication">
                   <Select value={form.status} onValueChange={(status) => setForm({ ...form, status })}>
                     <SelectTrigger className="h-10">

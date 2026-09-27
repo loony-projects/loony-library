@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import { router as bookRouter } from "./routes/book.js";
+import { router as categoriesRouter } from "./routes/categories.js";
 import { router as sectionsRouter } from "./routes/sections.js";
 import { router as searchRouter } from "./routes/search.js";
 import { router as referenceRouter } from "./routes/reference.js";
@@ -36,6 +37,7 @@ app.use("/api", (req, res, next) =>
     : editor(req, res, next),
 );
 app.use("/api", bookRouter);
+app.use("/api", categoriesRouter);
 app.use("/api", sectionsRouter);
 app.use("/api", searchRouter);
 app.use("/api", referenceRouter);

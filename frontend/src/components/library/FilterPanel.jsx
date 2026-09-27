@@ -49,12 +49,12 @@ const SHELVES = [
   { key: "wishlist", label: "Wishlist", icon: Bookmark },
 ];
 
-// Facets: personal shelves, genres and languages. Each facet narrows the
+// Facets: personal shelves, categories and languages. Each facet narrows the
 // catalogue independently; picking the active one again clears it.
 export default function FilterPanel({ facets, filters, onChange, className }) {
   const set = (key, value) =>
     onChange({ ...filters, [key]: filters[key] === value ? "" : value });
-  const noFilter = !filters.shelf && !filters.genre && !filters.language;
+  const noFilter = !filters.shelf && !filters.category && !filters.language;
   return (
     <nav aria-label="Filter books" className={cn("grid gap-8", className)}>
       <FacetGroup title="Library">
@@ -63,7 +63,7 @@ export default function FilterPanel({ facets, filters, onChange, className }) {
           label="All books"
           count={facets.total}
           icon={Library}
-          onClick={() => onChange({ shelf: "", genre: "", language: "" })}
+          onClick={() => onChange({ shelf: "", category: "", language: "" })}
         />
         {facets.shelves &&
           SHELVES.map((s) => (
@@ -77,10 +77,17 @@ export default function FilterPanel({ facets, filters, onChange, className }) {
             />
           ))}
       </FacetGroup>
-      {facets.genres.length > 0 && (
-        <FacetGroup title="Genres">
-          {facets.genres.map(([g, n]) => (
-            <FacetItem key={g} active={filters.genre === g} label={g} count={n} icon={Tag} onClick={() => set("genre", g)} />
+      {facets.categories.length > 0 && (
+        <FacetGroup title="Categories">
+          {facets.categories.map((c) => (
+            <div key={c.slug}>
+              <FacetItem active={filters.category === c.slug} label={c.name} count={c.count} icon={Tag} onClick={() => set("category", c.slug)} />
+              {c.children.map((s) => (
+                <div key={s.slug} className="pl-4">
+                  <FacetItem active={filters.category === s.slug} label={s.name} count={s.count} onClick={() => set("category", s.slug)} />
+                </div>
+              ))}
+            </div>
           ))}
         </FacetGroup>
       )}

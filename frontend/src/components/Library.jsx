@@ -81,7 +81,7 @@ export default function Library() {
   const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
-  const [filters, setFilters] = useState({ genre: "", language: "", shelf: "" });
+  const [filters, setFilters] = useState({ category: "", language: "", shelf: "" });
   const [sort, setSort] = useState("title");
   const [view, setView] = useState(readView);
   const [page, setPage] = useState(1);
@@ -168,9 +168,27 @@ export default function Library() {
       for (const v of values) map.set(v, (map.get(v) || 0) + 1);
       return [...map].sort((a, b) => a[0].localeCompare(b[0]));
     };
+    const byTop = new Map();
+    for (const b of all) {
+      if (!b.category_slug) continue;
+      const topSlug = b.category_parent_slug || b.category_slug;
+      const topName = b.category_parent_name || b.category_name;
+      if (!byTop.has(topSlug)) byTop.set(topSlug, { slug: topSlug, name: topName, count: 0, children: new Map() });
+      const top = byTop.get(topSlug);
+      top.count++;
+      if (b.category_parent_slug) {
+        if (!top.children.has(b.category_slug)) {
+          top.children.set(b.category_slug, { slug: b.category_slug, name: b.category_name, count: 0 });
+        }
+        top.children.get(b.category_slug).count++;
+      }
+    }
+    const categories = [...byTop.values()]
+      .map((t) => ({ ...t, children: [...t.children.values()].sort((a, b) => a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     return {
       total: all.length,
-      genres: count(all.flatMap((b) => b.genres || [])),
+      categories,
       languages: count(all.map((b) => b.language))
         .filter(([code]) => formatLanguage(code))
         .map(([code, n]) => [code, formatLanguage(code), n]),
@@ -184,12 +202,15 @@ export default function Library() {
     };
   }, [books, user, shelves, reading]);
   const hasFacets =
-    Boolean(facets.shelves) || facets.genres.length > 0 || facets.languages.length > 1;
+    Boolean(facets.shelves) || facets.categories.length > 0 || facets.languages.length > 1;
+  const categoryLabel = (slug) =>
+    facets.categories.find((c) => c.slug === slug)?.name ??
+    facets.categories.flatMap((c) => c.children).find((c) => c.slug === slug)?.name;
 
   const filtered = useMemo(() => {
     if (!books) return null;
     const q = query.trim().toLowerCase();
-    const { genre, language, shelf } = filters;
+    const { category, language, shelf } = filters;
     return books
       .filter(
         (b) =>
@@ -197,7 +218,7 @@ export default function Library() {
             b.title.toLowerCase().includes(q) ||
             b.author?.toLowerCase().includes(q) ||
             b.series?.toLowerCase().includes(q)) &&
-          (!genre || b.genres.includes(genre)) &&
+          (!category || b.category_slug === category || b.category_parent_slug === category) &&
           (!language || b.language === language) &&
           (!shelf || (shelf === "reading" ? reading[b.id] : shelves[b.id]?.[shelf])),
       )
@@ -217,11 +238,11 @@ export default function Library() {
 
   const activeChips = [
     filters.shelf && { key: "shelf", label: { reading: "Reading", favorite: "Favorites", wishlist: "Wishlist" }[filters.shelf] },
-    filters.genre && { key: "genre", label: filters.genre },
+    filters.category && { key: "category", label: categoryLabel(filters.category) },
     filters.language && { key: "language", label: formatLanguage(filters.language) },
   ].filter(Boolean);
   const heading = query.trim() ? "Results" : activeChips.length === 1 ? activeChips[0].label : "All books";
-  const showGenres = !query.trim() && activeChips.length === 0 && facets.genres.length >= 3;
+  const showCategories = !query.trim() && activeChips.length === 0 && facets.categories.length > 0;
 
   function changePage(p) {
     setPage(p);
@@ -230,7 +251,7 @@ export default function Library() {
 
   function clearAll() {
     setQuery("");
-    setFilters({ genre: "", language: "", shelf: "" });
+    setFilters({ category: "", language: "", shelf: "" });
   }
 
   // Creates the book, then its opening chapters in order (each one also
@@ -303,19 +324,19 @@ export default function Library() {
           <PersonalLibrary user={user} me={me} error={meError} booksById={booksById} />
         )}
 
-        {showGenres && (
-          <section aria-labelledby="browse-genres" className={`${container} pt-12`}>
-            <h2 id="browse-genres" className="mb-5 font-serif text-2xl font-medium tracking-tight">
-              Browse by genre
+        {showCategories && (
+          <section aria-labelledby="browse-categories" className={`${container} pt-12`}>
+            <h2 id="browse-categories" className="mb-5 font-serif text-2xl font-medium tracking-tight">
+              Browse by category
             </h2>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-4">
-              {facets.genres.slice(0, 8).map(([g]) => (
+              {facets.categories.map((c) => (
                 <CategoryCard
-                  key={g}
-                  name={g}
-                  books={books.filter((b) => b.genres.includes(g))}
+                  key={c.slug}
+                  name={c.name}
+                  books={books.filter((b) => b.category_slug === c.slug || b.category_parent_slug === c.slug)}
                   onSelect={() => {
-                    setFilters((f) => ({ ...f, genre: g }));
+                    setFilters((f) => ({ ...f, category: c.slug }));
                     catalogRef.current?.scrollIntoView({ behavior: "smooth" });
                   }}
                 />

@@ -30,12 +30,16 @@ export const router = Router();
 router.get("/books", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `select b.id, b.slug, b.title, b.author, b.published_year, b.cover_image, b.created_at, b.language, b.genres, b.series, b.volume, b.status,
+      `select b.id, b.slug, b.title, b.author, b.published_year, b.cover_image, b.created_at, b.language, b.series, b.volume, b.status,
+              cat.id as category_id, cat.slug as category_slug, cat.name as category_name,
+              parent_cat.id as category_parent_id, parent_cat.slug as category_parent_slug, parent_cat.name as category_parent_name,
               count(c.id) filter (where c.number is not null)::int as chapter_count
        from books b
        left join chapters c on c.book_id = b.id
+       left join categories cat on cat.id = b.category_id
+       left join categories parent_cat on parent_cat.id = cat.parent_id
        where b.status = 'published' or $1::boolean
-       group by b.id
+       group by b.id, cat.id, parent_cat.id
        order by b.title`,
       [req.user?.role === "editor"],
     );
@@ -65,6 +69,13 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
     if (Number.isNaN(publishedYear)) {
       return res.status(400).json({ error: "published_year must be a number" });
     }
+  }
+
+  let categoryId = null;
+  if (req.body.category_id) {
+    const { rows } = await pool.query("select id from categories where id = $1", [req.body.category_id]);
+    if (!rows.length) return res.status(400).json({ error: "Unknown category" });
+    categoryId = req.body.category_id;
   }
 
   const client = await pool.connect();
@@ -97,8 +108,8 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
     const {
       rows: [book],
     } = await client.query(
-      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, cover_image)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *`,
+      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, cover_image, category_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
       [
         slug,
         title,
@@ -109,6 +120,7 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
         price || null,
         publishedYear,
         coverImage,
+        categoryId,
       ],
     );
 

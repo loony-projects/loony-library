@@ -12,6 +12,7 @@ import {
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import BookCover from "./library/BookCover";
+import CategoryPicker from "./library/CategoryPicker";
 import { InlineMessage } from "./common/States";
 
 const METADATA_FIELDS = [
@@ -207,6 +208,7 @@ export default function BookWizard({ onFinish, onCancel }) {
                     </Field>
                   ))}
                 </div>
+                <CategoryPicker value={fields.category_id || null} onChange={(v) => setField("category_id", v)} />
               </div>
             </div>
           )}

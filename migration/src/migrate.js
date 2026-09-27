@@ -150,11 +150,20 @@ async function loadIntoPostgres(data) {
       await client.query("delete from books where title = $1", [data.book.title]);
     }
 
+    let categoryId = null;
+    if (data.book.category) {
+      const {
+        rows: [category],
+      } = await client.query("select id from categories where slug = $1", [data.book.category]);
+      if (!category) throw new Error(`Unknown category slug in book config: ${data.book.category}`);
+      categoryId = category.id;
+    }
+
     const {
       rows: [{ id: bookId }],
     } = await client.query(
-      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year)
-       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
       [
         data.book.slug,
         data.book.title,
@@ -164,6 +173,7 @@ async function loadIntoPostgres(data) {
         data.book.edition,
         data.book.price,
         data.book.published_year,
+        categoryId,
       ]
     );
 

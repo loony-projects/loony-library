@@ -2,7 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import { plural } from "@/lib/format";
 import BookCover from "./BookCover";
 
-// A genre shortcut: a fanned trio of its covers above the name and count.
+// A category shortcut: a fanned trio of its covers above the name and count.
 export default function CategoryCard({ name, books, onSelect }) {
   const sample = books.slice(0, 3);
   return (
