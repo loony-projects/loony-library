@@ -7,7 +7,7 @@ router.get("/books/:slug/glossary", resolveBookId, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       "select term, expansion from glossary_terms where book_id = $1 order by term",
-      [req.bookId]
+      [req.bookId],
     );
     res.json({ terms: rows });
   } catch (err) {
@@ -19,7 +19,7 @@ router.get("/books/:slug/symbols", resolveBookId, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       "select symbol, description from symbols where book_id = $1 order by symbol",
-      [req.bookId]
+      [req.bookId],
     );
     res.json({ symbols: rows });
   } catch (err) {

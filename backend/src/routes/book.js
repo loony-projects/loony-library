@@ -1,3 +1,5 @@
+import { publishedSQL } from "../features.js";
+import { imageType } from "../imageType.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +19,8 @@ const uploadCover = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) return cb(new Error("Cover must be an image"));
+    if (!file.mimetype.startsWith("image/"))
+      return cb(new Error("Cover must be an image"));
     cb(null, true);
   },
 });
@@ -27,12 +30,14 @@ export const router = Router();
 router.get("/books", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `select b.id, b.slug, b.title, b.author, b.published_year, b.cover_image,
+      `select b.id, b.slug, b.title, b.author, b.published_year, b.cover_image, b.created_at, b.language, b.genres, b.series, b.volume, b.status,
               count(c.id) filter (where c.number is not null)::int as chapter_count
        from books b
        left join chapters c on c.book_id = b.id
+       where b.status = 'published' or $1::boolean
        group by b.id
-       order by b.title`
+       order by b.title`,
+      [req.user?.role === "editor"],
     );
     res.json({ books: rows });
   } catch (err) {
@@ -67,18 +72,24 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
     await client.query("begin");
 
     const baseSlug = slugify(title);
-    const { rows: clashes } = await client.query("select slug from books where slug = $1 or slug like $2", [
-      baseSlug,
-      `${baseSlug}-%`,
-    ]);
+    const { rows: clashes } = await client.query(
+      "select slug from books where slug = $1 or slug like $2",
+      [baseSlug, `${baseSlug}-%`],
+    );
     const taken = new Set(clashes.map((r) => r.slug));
     let slug = baseSlug;
     for (let i = 2; taken.has(slug); i++) slug = `${baseSlug}-${i}`;
 
     let coverImage = null;
     if (req.file) {
-      const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
-      coverImage = `${slug}${ext}`;
+      const ext = imageType(req.file.buffer);
+      if (!ext) {
+        await client.query("rollback");
+        return res
+          .status(400)
+          .json({ error: "Cover must be a PNG, JPEG or WebP image" });
+      }
+      coverImage = `${slug}.${ext}`;
       fs.mkdirSync(COVERS_DIR, { recursive: true });
       fs.writeFileSync(path.join(COVERS_DIR, coverImage), req.file.buffer);
     }
@@ -98,9 +109,21 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
         price || null,
         publishedYear,
         coverImage,
-      ]
+      ],
     );
 
+    if (author?.trim()) {
+      const {
+        rows: [entity],
+      } = await client.query(
+        "insert into authors(name) values($1) on conflict(name) do update set name=excluded.name returning id",
+        [author.trim()],
+      );
+      await client.query("insert into book_authors values($1,$2)", [
+        book.id,
+        entity.id,
+      ]);
+    }
     await client.query("commit");
     res.status(201).json({ book });
   } catch (err) {
@@ -113,7 +136,9 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
 
 router.get("/books/:slug", resolveBookId, async (req, res, next) => {
   try {
-    const { rows } = await pool.query("select * from books where id = $1", [req.bookId]);
+    const { rows } = await pool.query("select * from books where id = $1", [
+      req.bookId,
+    ]);
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -123,24 +148,27 @@ router.get("/books/:slug", resolveBookId, async (req, res, next) => {
 router.get("/books/:slug/toc", resolveBookId, async (req, res, next) => {
   try {
     const { rows: chapters } = await pool.query(
-      `select id, number, slug, title, sort_order
-       from chapters where book_id = $1 order by sort_order`,
-      [req.bookId]
+      `select c.id, c.number, c.slug, c.title, c.sort_order
+       from chapters c where c.book_id = $1 and ($2 or exists (select 1 from sections s join books b on b.id=c.book_id where s.chapter_id=c.id and ${publishedSQL})) order by c.sort_order`,
+      [req.bookId, req.user?.role === "editor"],
     );
 
     const { rows: sections } = await pool.query(
       `select s.id, s.chapter_id, s.parent_id, s.numbering, s.title, s.depth, s.sort_order
        from sections s
        join chapters c on c.id = s.chapter_id
-       where c.book_id = $1
+       join books b on b.id=c.book_id
+       where c.book_id = $1 and (${publishedSQL} or $2)
        order by s.sort_order`,
-      [req.bookId]
+      [req.bookId, req.user?.role === "editor"],
     );
 
     const byId = new Map();
     for (const s of sections) byId.set(s.id, { ...s, children: [] });
 
-    const byChapter = new Map(chapters.map((c) => [c.id, { ...c, sections: [] }]));
+    const byChapter = new Map(
+      chapters.map((c) => [c.id, { ...c, sections: [] }]),
+    );
     for (const s of sections) {
       const node = byId.get(s.id);
       if (s.parent_id && byId.has(s.parent_id)) {
@@ -174,7 +202,7 @@ router.post("/books/:slug/chapters", resolveBookId, async (req, res, next) => {
       rows: [{ next_order }],
     } = await client.query(
       "select coalesce(max(sort_order), -1) + 1 as next_order from chapters where book_id = $1",
-      [req.bookId]
+      [req.bookId],
     );
 
     const {
@@ -182,7 +210,7 @@ router.post("/books/:slug/chapters", resolveBookId, async (req, res, next) => {
     } = await client.query(
       `insert into chapters (book_id, number, slug, title, sort_order)
        values ($1,$2,$3,$4,$5) returning *`,
-      [req.bookId, number || null, slugify(title), title, next_order]
+      [req.bookId, number || null, slugify(title), title, next_order],
     );
 
     const {
@@ -190,7 +218,7 @@ router.post("/books/:slug/chapters", resolveBookId, async (req, res, next) => {
     } = await client.query(
       `insert into sections (chapter_id, parent_id, numbering, title, depth, sort_order)
        values ($1, null, null, $2, 1, 0) returning *`,
-      [chapter.id, title]
+      [chapter.id, title],
     );
 
     await client.query("commit");
@@ -208,7 +236,10 @@ router.post("/books/:slug/chapters", resolveBookId, async (req, res, next) => {
 // figures, and tables via the schema's ON DELETE CASCADE chain.
 router.delete("/chapters/:id", async (req, res, next) => {
   try {
-    const { rowCount } = await pool.query("delete from chapters where id = $1", [req.params.id]);
+    const { rowCount } = await pool.query(
+      "delete from chapters where id = $1",
+      [req.params.id],
+    );
     if (!rowCount) return res.status(404).json({ error: "Chapter not found" });
     res.status(204).end();
   } catch (err) {

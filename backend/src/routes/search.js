@@ -1,3 +1,4 @@
+import { publishedSQL } from "../features.js";
 import { Router } from "express";
 import { pool, resolveBookId } from "../db.js";
 
@@ -17,11 +18,12 @@ router.get("/books/:slug/search", resolveBookId, async (req, res, next) => {
        from content_blocks cb
        join sections s on s.id = cb.section_id
        join chapters c on c.id = s.chapter_id
+       join books b on b.id=c.book_id
        cross join plainto_tsquery('english', $1) query
-       where cb.tsv @@ query and c.book_id = $2
+       where cb.tsv @@ query and c.book_id = $2 and (${publishedSQL} or $3)
        order by rank desc
        limit 20`,
-      [q, req.bookId]
+      [q, req.bookId, req.user?.role === "editor"],
     );
 
     res.json({ results: rows });

@@ -18,7 +18,7 @@ export function getBookIdBySlug(slug) {
           throw new Error(`No book with slug "${slug}"`);
         }
         return r.rows[0].id;
-      })
+      }),
     );
   }
   return bookIdBySlug.get(slug);

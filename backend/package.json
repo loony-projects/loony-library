@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node src/server.js",
     "start:dev": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "editor": "node scripts/editor.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

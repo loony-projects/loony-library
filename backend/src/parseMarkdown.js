@@ -19,17 +19,25 @@ function parseHeadingText(raw) {
 }
 
 function rawSlice(source, node) {
-  return source.slice(node.position.start.offset, node.position.end.offset).trim();
+  return source
+    .slice(node.position.start.offset, node.position.end.offset)
+    .trim();
 }
 
 function tableToRows(node, source) {
   return node.children.map((row) =>
-    row.children.map((cell) => mdastToString(cell).trim() || rawSlice(source, cell))
+    row.children.map(
+      (cell) => mdastToString(cell).trim() || rawSlice(source, cell),
+    ),
   );
 }
 
 function isImageOnlyParagraph(node) {
-  return node.type === "paragraph" && node.children.length === 1 && node.children[0].type === "image";
+  return (
+    node.type === "paragraph" &&
+    node.children.length === 1 &&
+    node.children[0].type === "image"
+  );
 }
 
 function isCaptionParagraph(node) {
@@ -106,8 +114,12 @@ function mergeHtmlWrappers(items) {
       const frame = stack.pop();
       const target = stack.length ? stack[stack.length - 1].children : into;
       target.push(
-        { kind: "block", block_type: "html", content: { html: frame.openValue, text: frame.openValue } },
-        ...frame.children
+        {
+          kind: "block",
+          block_type: "html",
+          content: { html: frame.openValue, text: frame.openValue },
+        },
+        ...frame.children,
       );
     }
   }
@@ -123,11 +135,19 @@ function mergeHtmlWrappers(items) {
     if (item.block_type === "html") {
       const openTag = matchSoloOpenTag(item.content.html);
       if (openTag) {
-        stack.push({ tagName: openTag, openValue: item.content.html, children: [] });
+        stack.push({
+          tagName: openTag,
+          openValue: item.content.html,
+          children: [],
+        });
         continue;
       }
       const closeTag = matchSoloCloseTag(item.content.html);
-      if (closeTag && stack.length && stack[stack.length - 1].tagName === closeTag) {
+      if (
+        closeTag &&
+        stack.length &&
+        stack[stack.length - 1].tagName === closeTag
+      ) {
         const frame = stack.pop();
         const wrapped = {
           kind: "block",
@@ -186,7 +206,12 @@ export function parseMarkdown(source) {
       items.push({
         kind: "block",
         block_type: "image",
-        content: { src: img.url, alt: img.alt || null, caption, text: caption || img.alt || "" },
+        content: {
+          src: img.url,
+          alt: img.alt || null,
+          caption,
+          text: caption || img.alt || "",
+        },
       });
       continue;
     }
@@ -224,7 +249,10 @@ export function parseMarkdown(source) {
       items.push({
         kind: "block",
         block_type: "blockquote",
-        content: { markdown: rawSlice(source, node), text: mdastToString(node) },
+        content: {
+          markdown: rawSlice(source, node),
+          text: mdastToString(node),
+        },
       });
       continue;
     }
@@ -233,7 +261,11 @@ export function parseMarkdown(source) {
       items.push({
         kind: "block",
         block_type: "code",
-        content: { code: node.value, lang: node.lang || null, text: node.value },
+        content: {
+          code: node.value,
+          lang: node.lang || null,
+          text: node.value,
+        },
       });
       continue;
     }
