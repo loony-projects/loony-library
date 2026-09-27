@@ -21,7 +21,10 @@ import {
   EyeOff,
   X,
   Loader2,
+  ImageUp,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 // Wraps or prefixes the current selection in a textarea with markdown
 // syntax, keeping the selection intact so the toolbar/shortcuts feel like a
@@ -257,55 +260,91 @@ export default function MarkdownEditor({
   return (
     <div
       ref={dialogRef}
-      className="md-editor"
+      className="fixed inset-0 z-50 flex h-dvh flex-col bg-background animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
       role="dialog"
       aria-modal="true"
       aria-label={`Edit ${title}`}
       onKeyDown={handleKeyDown}
     >
-      <header className="md-editor-header">
-        <button
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
+        <Button
           type="button"
-          className="md-editor-icon-button"
+          variant="ghost"
+          size="icon"
           title="Close (Esc)"
+          aria-label="Close editor"
           onClick={requestCancel}
         >
-          <X size={18} />
-        </button>
-        <div className="md-editor-heading">
-          <span className="md-editor-title">{title}</span>
-          <span className="md-editor-status">
-            {dirty ? "Unsaved changes" : hasSavedOnce ? "Saved" : "No changes"}{" "}
-            · {wordCount(text)} words
-          </span>
+          <X />
+        </Button>
+        <div className="hidden min-w-0 flex-1 md:block">
+          <p className="truncate font-serif text-lg font-medium leading-tight">{title}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                dirty ? "bg-warning" : hasSavedOnce ? "bg-success" : "bg-border",
+              )}
+            />
+            {dirty ? "Unsaved changes" : hasSavedOnce ? "Saved" : "No changes"}
+            <span aria-hidden>·</span>
+            <span className="tabular-nums">{wordCount(text)} words</span>
+          </p>
         </div>
-        <div className="md-editor-header-actions">
-          {error && <span className="md-editor-error">{error}</span>}
-          <button
+        <div className="ml-auto flex items-center gap-2">
+          {error && (
+            <span role="alert" className="max-w-56 truncate text-[13px] text-destructive">
+              {error}
+            </span>
+          )}
+          <Button
             type="button"
-            className={`md-toolbar-preview${showPreview ? " active" : ""}`}
+            variant={showPreview ? "soft" : "outline"}
+            size="sm"
+            aria-pressed={showPreview}
             onClick={() => setShowPreview((v) => !v)}
           >
-            {showPreview ? <EyeOff size={16} /> : <Eye size={16} />}
+            {showPreview ? <EyeOff /> : <Eye />}
             Preview
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="md-editor-save"
+            size="sm"
             onClick={handleSave}
             disabled={saving || !dirty}
           >
-            {saving && <Loader2 size={15} className="md-spin" />}
+            {saving && <Loader2 className="animate-spin" />}
             {saving ? "Saving…" : "Save draft"}
-          </button>
+          </Button>
         </div>
       </header>
 
-      <div className="md-editor-toolbar">
-        <label className="upload-image">
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-muted/50 px-3 py-1.5 scrollbar-none sm:px-5">
+        {TOOLBAR_GROUPS.map((group, i) => (
+          <div
+            className="flex items-center gap-0.5 border-r pr-1 last:border-r-0"
+            key={i}
+          >
+            {group.map((btn) => (
+              <button
+                key={btn.title}
+                type="button"
+                title={btn.title}
+                aria-label={btn.title}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring outline-none"
+                onClick={() => runToolbarAction(btn.action)}
+              >
+                <btn.icon size={16} />
+              </button>
+            ))}
+          </div>
+        ))}
+        <label className="ml-1 flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-[13px] text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-within:ring-[3px] focus-within:ring-ring">
+          <ImageUp size={16} />
           Upload image
           <input
             type="file"
+            className="sr-only"
             accept="image/png,image/jpeg,image/webp"
             onChange={async (e) => {
               const file = e.target.files[0];
@@ -320,41 +359,34 @@ export default function MarkdownEditor({
               } catch (e) {
                 setError(e.message);
               }
+              e.target.value = "";
             }}
           />
         </label>
-        {TOOLBAR_GROUPS.map((group, i) => (
-          <div className="md-editor-toolbar-group" key={i}>
-            {group.map((btn) => (
-              <button
-                key={btn.title}
-                type="button"
-                title={btn.title}
-                aria-label={btn.title}
-                className="md-editor-icon-button"
-                onClick={() => runToolbarAction(btn.action)}
-              >
-                <btn.icon size={17} />
-              </button>
-            ))}
-          </div>
-        ))}
       </div>
 
       <div
-        className={`md-editor-body${showPreview ? " md-editor-body--split" : ""}`}
+        className={cn(
+          "flex min-h-0 flex-1",
+          showPreview && "flex-col md:flex-row",
+        )}
       >
         <textarea
           aria-label="Section Markdown"
           ref={textareaRef}
-          className="md-editor-textarea"
+          className={cn(
+            "h-full min-w-0 flex-1 resize-none bg-background font-mono text-[15px] leading-[1.8] text-foreground outline-none",
+            showPreview
+              ? "border-b px-5 py-6 md:border-b-0 md:border-r md:px-8"
+              : "px-[max(1.25rem,calc((100%-46rem)/2))] py-10",
+          )}
           value={text}
           onChange={(e) => setText(e.target.value)}
           spellCheck="false"
         />
         {showPreview && (
           <div
-            className="md-editor-preview"
+            className="reading h-full min-w-0 flex-1 overflow-y-auto bg-card px-5 py-6 md:px-10 md:py-10"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         )}

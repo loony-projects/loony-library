@@ -8,11 +8,24 @@ import {
   useParams,
   useOutletContext,
 } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { ChevronRight, History, Pencil, Printer, RotateCcw, Upload } from "lucide-react";
 import { api } from "../api";
 import { blocksToMarkdown } from "../markdown";
+import { formatDate } from "@/lib/format";
 import Block from "./Blocks";
 import MarkdownEditor from "./MarkdownEditor";
+import ReadingSkeleton from "./common/ReadingSkeleton";
+import { EmptyState, ErrorState } from "./common/States";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export default function SectionPage() {
   const { id } = useParams();
@@ -26,7 +39,8 @@ function SectionContent() {
   const [editorReady, setEditorReady] = useState(false);
   const [draft, setDraft] = useState(null),
     [revisions, setRevisions] = useState([]),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [publishing, setPublishing] = useState(false);
   useEffect(() => {
     setDraft(null);
     setRevisions([]);
@@ -76,8 +90,8 @@ function SectionContent() {
   }, [location.state?.autoEdit, location.pathname, navigate]);
 
   if (error)
-    return <p className="error">Couldn't load this section: {error}</p>;
-  if (!data) return <p className="loading">Loading…</p>;
+    return <ErrorState title="Couldn’t load this section" message={error} />;
+  if (!data) return <ReadingSkeleton />;
 
   const { section, breadcrumbs, children, blocks } = data;
 
@@ -91,95 +105,136 @@ function SectionContent() {
     setRevisions(history.revisions);
   }
 
-  return (
-    <article className="section-page">
-      <nav className="breadcrumbs">
-        {breadcrumbs.map((b, i) => (
-          <span key={b.id}>
-            {i > 0 && <span className="crumb-sep"> / </span>}
-            <Link to={`/${bookSlug}/sections/${b.id}`}>
-              {b.numbering ? `${b.numbering} ${b.title}` : b.title}
-            </Link>
-          </span>
-        ))}
-      </nav>
+  async function publish() {
+    setPublishing(true);
+    try {
+      await api.post(`/api/sections/${id}/publish`, {});
+      setData(await api.section(id));
+      setDraft(null);
+      const r = await api.get(`/api/sections/${id}/revisions`);
+      setRevisions(r.revisions);
+      await refresh();
+      setNotice("Published");
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setPublishing(false);
+    }
+  }
 
-      <div className="section-heading-row">
-        <h1>
-          {section.numbering && (
-            <span className="section-numbering">{section.numbering}</span>
-          )}
+  async function restore(revisionId) {
+    try {
+      await api.post(`/api/sections/${id}/restore/${revisionId}`, {});
+      const d = await api.get(`/api/sections/${id}/editor`);
+      setDraft(d.draft_markdown);
+      setEditing(false);
+      setNotice("Version restored as a draft. Edit to review, then publish.");
+    } catch (e) {
+      setNotice(e.message);
+    }
+  }
+
+  const trail = breadcrumbs.slice(0, -1);
+  const chapter = toc?.chapters.find((c) => c.id === section.chapter_id);
+
+  return (
+    <article className="animate-in fade-in-0 duration-300">
+      {(chapter || trail.length > 0) && (
+        <nav aria-label="Breadcrumb" className="mb-5">
+          <ol className="flex flex-wrap items-center gap-1 text-[13px] text-muted-foreground">
+            {chapter && (
+              <li className="font-medium text-foreground/70">
+                {chapter.number ? `${chapter.number}. ` : ""}
+                {chapter.title}
+              </li>
+            )}
+            {trail.map((b, i) => (
+              <li key={b.id} className="flex items-center gap-1">
+                {(i > 0 || chapter) && <ChevronRight className="size-3.5 opacity-60" />}
+                <Link
+                  to={`/${bookSlug}/sections/${b.id}`}
+                  className="rounded-sm transition-colors hover:text-foreground"
+                >
+                  {b.numbering ? `${b.numbering} ${b.title}` : b.title}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      <header className="mb-10">
+        {section.numbering && (
+          <p className="mb-3 font-sans text-[13px] font-semibold tabular-nums tracking-wide text-primary">
+            § {section.numbering}
+          </p>
+        )}
+        <h1 className="font-serif text-[2.1rem] font-medium leading-[1.12] tracking-[-0.015em] text-balance sm:text-[2.75rem]">
           {section.title}
         </h1>
-        {!editing && editor && (
-          <button
-            type="button"
-            className="section-edit-button"
-            disabled={!editorReady}
-            onClick={() => setEditing(true)}
-          >
-            <Pencil size={14} />
-            Edit
-          </button>
-        )}
-      </div>
 
-      <div className="no-print">
-        <Link to={`/${bookSlug}/print/${section.chapter_id}`}>
-          Print chapter / PDF
-        </Link>
-      </div>
-      {editor && (
-        <div className="panel no-print">
-          <p>
-            Status: {section.status}
-            {draft !== null ? " · Unpublished changes" : ""}
-          </p>
-          <button
-            onClick={async () => {
-              try {
-                await api.post(`/api/sections/${id}/publish`, {});
-                setData(await api.section(id));
-                setDraft(null);
-                const r = await api.get(`/api/sections/${id}/revisions`);
-                setRevisions(r.revisions);
-                await refresh();
-                setNotice("Published");
-              } catch (e) {
-                setNotice(e.message);
-              }
-            }}
-          >
-            Publish saved draft
-          </button>
-          <details>
-            <summary>Version history / undo</summary>
-            {revisions.map((r) => (
-              <p key={r.id}>
-                {new Date(r.created_at).toLocaleString()}{" "}
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.post(`/api/sections/${id}/restore/${r.id}`, {});
-                      const d = await api.get(`/api/sections/${id}/editor`);
-                      setDraft(d.draft_markdown);
-                      setEditing(false);
-                      setNotice(
-                        "Version restored as a draft. Edit to review, then publish.",
-                      );
-                    } catch (e) {
-                      setNotice(e.message);
-                    }
-                  }}
-                >
-                  Restore as draft
-                </button>
-              </p>
-            ))}
-          </details>
-          <p role="status">{notice}</p>
+        <div className="no-print mt-6 flex flex-wrap items-center gap-2 border-b pb-5">
+          {editor && (
+            <>
+              <Badge variant={section.status === "published" ? "success" : "secondary"} className="capitalize">
+                {section.status}
+              </Badge>
+              {draft !== null && <Badge variant="warning">Unpublished changes</Badge>}
+            </>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-1">
+            <Tooltip content="Print chapter / PDF">
+              <Button variant="ghost" size="icon-sm" asChild className="text-muted-foreground hover:text-foreground">
+                <Link to={`/${bookSlug}/print/${section.chapter_id}`} aria-label="Print chapter / PDF">
+                  <Printer />
+                </Link>
+              </Button>
+            </Tooltip>
+            {editor && (
+              <>
+                <DropdownMenu>
+                  <Tooltip content="Version history / undo">
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon-sm" aria-label="Version history" className="text-muted-foreground hover:text-foreground">
+                        <History />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </Tooltip>
+                  <DropdownMenuContent className="max-h-80 w-72 overflow-y-auto">
+                    <DropdownMenuLabel>Version history</DropdownMenuLabel>
+                    {revisions.length === 0 && (
+                      <p className="px-2.5 pb-2 text-sm text-muted-foreground">No earlier versions yet.</p>
+                    )}
+                    {revisions.map((r) => (
+                      <DropdownMenuItem key={r.id} onSelect={() => restore(r.id)}>
+                        <RotateCcw />
+                        <span className="flex-1">{formatDate(r.created_at)}</span>
+                        <span className="text-xs text-muted-foreground">Restore</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="soft" size="sm" onClick={publish} disabled={publishing}>
+                  <Upload />
+                  {publishing ? "Publishing…" : "Publish saved draft"}
+                </Button>
+                {!editing && (
+                  <Button size="sm" disabled={!editorReady} onClick={() => setEditing(true)}>
+                    <Pencil />
+                    Edit
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      )}
+        {editor && notice && (
+          <p role="status" className="no-print mt-3 text-sm text-muted-foreground">
+            {notice}
+          </p>
+        )}
+      </header>
+
       {editing && editor && editorReady ? (
         <MarkdownEditor
           title={
@@ -191,11 +246,28 @@ function SectionContent() {
           onSave={handleSave}
           onCancel={() => setEditing(false)}
         />
+      ) : blocks.length === 0 ? (
+        <EmptyState
+          className="section-content rounded-xl border border-dashed py-12"
+          title="Nothing here yet"
+          description={
+            children.length
+              ? "This section is an introduction to the parts below."
+              : editor
+                ? "Start writing this section."
+                : "This section has no content yet."
+          }
+          action={
+            editor &&
+            editorReady && (
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                <Pencil /> Write
+              </Button>
+            )
+          }
+        />
       ) : (
-        <div className="section-content">
-          {blocks.length === 0 && (
-            <p className="empty">No content in this section.</p>
-          )}
+        <div className="section-content reading">
           {blocks.map((block) => (
             <Block key={block.id} block={block} />
           ))}
@@ -203,13 +275,22 @@ function SectionContent() {
       )}
 
       {children.length > 0 && (
-        <nav className="section-children">
-          <h2>In this section</h2>
-          <ul>
+        <nav aria-labelledby="in-this-section" className="mt-14">
+          <h2 id="in-this-section" className="mb-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            In this section
+          </h2>
+          <ul className="divide-y rounded-lg border bg-card">
             {children.map((c) => (
               <li key={c.id}>
-                <Link to={`/${bookSlug}/sections/${c.id}`}>
-                  {c.numbering ? `${c.numbering} ${c.title}` : c.title}
+                <Link
+                  to={`/${bookSlug}/sections/${c.id}`}
+                  className="group flex items-center gap-3 px-4 py-3.5 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-accent/50"
+                >
+                  {c.numbering && (
+                    <span className="w-10 shrink-0 text-sm tabular-nums text-muted-foreground">{c.numbering}</span>
+                  )}
+                  <span className="flex-1 font-serif text-[17px] group-hover:text-primary">{c.title}</span>
+                  <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </li>
             ))}

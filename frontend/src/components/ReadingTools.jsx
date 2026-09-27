@@ -1,136 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bookmark,
+  ChevronDown,
+  Highlighter,
+  NotebookPen,
+  TextSelect,
+  Trash2,
+} from "lucide-react";
 import { api } from "../api";
 import { useAccount } from "./Account";
-export function Preferences() {
-  const [settings, setSettings] = useState(() => {
-    try {
-      return (
-        JSON.parse(localStorage.getItem("reading-settings")) || {
-          dark: false,
-          size: 18,
-          spacing: 1.7,
-        }
-      );
-    } catch {
-      return { dark: false, size: 18, spacing: 1.7 };
-    }
-  });
-  useEffect(() => {
-    document.documentElement.dataset.theme = settings.dark ? "dark" : "light";
-    document.documentElement.style.setProperty(
-      "--reading-size",
-      `${settings.size}px`,
-    );
-    document.documentElement.style.setProperty(
-      "--reading-spacing",
-      settings.spacing,
-    );
-    try {
-      localStorage.setItem("reading-settings", JSON.stringify(settings));
-    } catch {}
-  }, [settings]);
-  return (
-    <details className="no-print preferences">
-      <summary>Reading appearance</summary>
-      <label>
-        <input
-          type="checkbox"
-          checked={settings.dark}
-          onChange={(e) => setSettings({ ...settings, dark: e.target.checked })}
-        />
-        Dark mode
-      </label>
-      <label>
-        Font size
-        <input
-          type="range"
-          min="14"
-          max="28"
-          value={settings.size}
-          onChange={(e) =>
-            setSettings({ ...settings, size: Number(e.target.value) })
-          }
-        />
-      </label>
-      <label>
-        Line spacing
-        <input
-          type="range"
-          min="1.2"
-          max="2.4"
-          step="0.1"
-          value={settings.spacing}
-          onChange={(e) =>
-            setSettings({ ...settings, spacing: Number(e.target.value) })
-          }
-        />
-      </label>
-    </details>
-  );
-}
-export function PersonalLibrary() {
-  const { user } = useAccount();
-  const [data, setData] = useState(null),
-    [error, setError] = useState("");
-  useEffect(() => {
-    if (user)
-      api
-        .get("/api/me")
-        .then(setData)
-        .catch((e) => setError(e.message));
-    else setData(null);
-  }, [user]);
-  if (!user) return null;
-  return (
-    <section className="panel">
-      <h2>Your library</h2>
-      {error && <p role="alert">{error}</p>}
-      {data && (
-        <>
-          <h3>Continue reading</h3>
-          {data.reading.length === 0 && (
-            <p>Open a section to start your reading history.</p>
-          )}
-          {data.reading.map((x) => (
-            <p key={x.book_id}>
-              <Link to={`/${x.slug}/sections/${x.section_id}`}>
-                {x.title} — {x.section_title}
-              </Link>
-            </p>
-          ))}
-          <h3>Favorites & wishlist</h3>
-          {data.shelves
-            .filter((x) => x.favorite || x.wishlist)
-            .map((x) => (
-              <p key={x.book_id}>
-                <Link to={`/${x.slug}`}>{x.title}</Link> ·{" "}
-                {x.favorite ? "Favorite " : ""}
-                {x.wishlist ? "Wishlist" : ""}
-              </p>
-            ))}
-          <details>
-            <summary>Bookmarks, highlights & notes</summary>
-            {data.annotations.map((x) => (
-              <p key={x.id}>
-                <Link to={`/${x.slug}/sections/${x.section_id}`}>
-                  {x.book_title}
-                </Link>{" "}
-                · {x.kind}: {x.quote} {x.note}
-              </p>
-            ))}
-          </details>
-        </>
-      )}
-    </section>
-  );
-}
+import { cn } from "@/lib/utils";
+import { InlineMessage } from "./common/States";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Textarea } from "@/components/ui/textarea";
+
+const KIND_ICON = { bookmark: Bookmark, highlight: Highlighter, note: NotebookPen };
+
 export function Annotations({ id }) {
   const { user } = useAccount();
   const [items, setItems] = useState([]),
     [quote, setQuote] = useState(""),
     [note, setNote] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [open, setOpen] = useState(false);
   const refresh = useCallback(
     () =>
       api
@@ -196,49 +92,125 @@ export function Annotations({ id }) {
   }
   if (!user) return null;
   return (
-    <details className="panel no-print">
-      <summary>Bookmarks, highlights & notes ({items.length})</summary>
-      <button onClick={() => save("bookmark")}>Bookmark section</button>
-      <button onClick={() => setQuote(window.getSelection()?.toString() || "")}>
-        Capture selected text
+    <section className="no-print mt-16 rounded-xl border bg-card shadow-xs">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 rounded-xl px-5 py-4 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring"
+      >
+        <span className="flex size-8 items-center justify-center rounded-full bg-primary-soft text-primary">
+          <NotebookPen className="size-4" />
+        </span>
+        <span className="flex-1">
+          <span className="block text-sm font-medium">Your notes on this section</span>
+          <span className="block text-[13px] text-muted-foreground">
+            {items.length
+              ? `${items.length} saved · private to you`
+              : "Bookmarks, highlights and notes · private to you"}
+          </span>
+        </span>
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
       </button>
-      <label>
-        Highlighted text
-        <textarea value={quote} onChange={(e) => setQuote(e.target.value)} />
-      </label>
-      <label>
-        Note
-        <textarea value={note} onChange={(e) => setNote(e.target.value)} />
-      </label>
-      <button disabled={!quote} onClick={() => save("highlight")}>
-        Save highlight
-      </button>
-      <button disabled={!note} onClick={() => save("note")}>
-        Save note
-      </button>
-      {error && <p role="alert">{error}</p>}
-      {items.map((x) => (
-        <div key={x.id}>
-          <strong>{x.kind}</strong>
-          <blockquote>{x.quote}</blockquote>
-          <p>{x.note}</p>
-          <button
-            onClick={async () => {
-              try {
-                await api.del(`/api/me/annotations/${x.id}`);
-                await refresh();
-              } catch (e) {
-                setError(e.message);
-              }
-            }}
-          >
-            Remove {x.kind}
-          </button>
+      {open && (
+        <div className="grid gap-5 border-t px-5 pb-5 pt-5 animate-in fade-in-0">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => save("bookmark")}>
+              <Bookmark /> Bookmark section
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setQuote(window.getSelection()?.toString() || "")}
+            >
+              <TextSelect /> Capture selected text
+            </Button>
+          </div>
+          <Field label="Highlighted text" htmlFor="annot-quote" hint="Select a passage above, then capture it.">
+            <Textarea
+              id="annot-quote"
+              rows={2}
+              className="font-serif italic"
+              value={quote}
+              onChange={(e) => setQuote(e.target.value)}
+            />
+          </Field>
+          <Field label="Note" htmlFor="annot-note">
+            <Textarea id="annot-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={!quote} onClick={() => save("highlight")}>
+              <Highlighter /> Save highlight
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!note} onClick={() => save("note")}>
+              <NotebookPen /> Save note
+            </Button>
+          </div>
+          <InlineMessage tone="error">{error}</InlineMessage>
+          {items.length > 0 && (
+            <ul className="divide-y border-t">
+              {items.map((x) => {
+                const Icon = KIND_ICON[x.kind] || NotebookPen;
+                return (
+                  <li key={x.id} className="group flex gap-3 py-4">
+                    <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium capitalize text-muted-foreground">{x.kind}</p>
+                      {x.quote && (
+                        <blockquote className="mt-1 border-l-2 border-primary/40 pl-3 font-serif text-[16px] italic leading-relaxed">
+                          {x.quote}
+                        </blockquote>
+                      )}
+                      {x.note && <p className="mt-1.5 text-sm">{x.note}</p>}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Remove ${x.kind}`}
+                      className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                      onClick={async () => {
+                        try {
+                          await api.del(`/api/me/annotations/${x.id}`);
+                          await refresh();
+                        } catch (e) {
+                          setError(e.message);
+                        }
+                      }}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
-      ))}
-    </details>
+      )}
+    </section>
   );
 }
+
+function NavCard({ to, label, title, next }) {
+  return (
+    <Link
+      to={to}
+      className={cn(
+        "group flex flex-col gap-1 rounded-lg border p-4 transition-[border-color,box-shadow,background-color] duration-200 outline-none hover:border-input hover:bg-card hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring sm:p-5",
+        next && "items-end text-right",
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground">
+        {!next && <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" />}
+        {label}
+        {next && <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />}
+      </span>
+      <span className="line-clamp-2 font-serif text-[17px] font-medium leading-snug group-hover:text-primary">
+        {title}
+      </span>
+    </Link>
+  );
+}
+
 export function SectionNavigation({ id, slug, toc }) {
   const sections = [];
   function walk(nodes) {
@@ -249,23 +221,20 @@ export function SectionNavigation({ id, slug, toc }) {
   }
   for (const c of toc?.chapters || []) walk(c.sections);
   const i = sections.findIndex((s) => s.id === id);
+  const prev = i > 0 && sections[i - 1];
+  const next = i >= 0 && i < sections.length - 1 && sections[i + 1];
+  if (!prev && !next) return null;
   return (
     <nav
-      className="section-navigation no-print"
+      className="no-print mt-12 grid gap-3 border-t pt-8 sm:grid-cols-2"
       aria-label="Sequential reading"
     >
-      {i > 0 ? (
-        <Link to={`/${slug}/sections/${sections[i - 1].id}`}>
-          ← {sections[i - 1].title}
-        </Link>
+      {prev ? (
+        <NavCard to={`/${slug}/sections/${prev.id}`} label="Previous" title={prev.title} />
       ) : (
-        <span />
+        <span className="hidden sm:block" />
       )}
-      {i >= 0 && i < sections.length - 1 && (
-        <Link to={`/${slug}/sections/${sections[i + 1].id}`}>
-          {sections[i + 1].title} →
-        </Link>
-      )}
+      {next && <NavCard next to={`/${slug}/sections/${next.id}`} label="Next" title={next.title} />}
     </nav>
   );
 }

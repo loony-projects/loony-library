@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
+import { BookDashed } from "lucide-react";
 import { api } from "../api";
+import { useAccount } from "./Account";
+import ReadingSkeleton from "./common/ReadingSkeleton";
+import { EmptyState, ErrorState } from "./common/States";
 
 export default function Home() {
   const { bookSlug } = useParams();
+  const { editor } = useAccount();
   const [error, setError] = useState(null);
   const [firstSectionId, setFirstSectionId] = useState(undefined);
 
@@ -20,9 +25,19 @@ export default function Home() {
       .catch((e) => setError(e.message));
   }, [bookSlug]);
 
-  if (error) return <p role="alert">{error}</p>;
-  if (firstSectionId === undefined) return <p className="loading">Loading…</p>;
+  if (error) return <ErrorState title="Couldn’t open this book" message={error} />;
+  if (firstSectionId === undefined) return <ReadingSkeleton />;
   if (firstSectionId === null)
-    return <p className="error">No content found.</p>;
+    return (
+      <EmptyState
+        icon={BookDashed}
+        title="No content found"
+        description={
+          editor
+            ? "This book has no sections yet. Add a chapter from the contents panel to begin."
+            : "This book doesn’t have any published sections yet."
+        }
+      />
+    );
   return <Navigate to={`/${bookSlug}/sections/${firstSectionId}`} replace />;
 }
