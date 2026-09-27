@@ -50,3 +50,10 @@ The platform is book-agnostic: each book is just a small JSON config under [migr
 - [docs/er_diagram.md](docs/er_diagram.md) — entity-relationship diagram
 - [docs/migration.md](docs/migration.md) — how markdown books are parsed into the schema
 - [docs/dev_setup.md](docs/dev_setup.md) — running the full stack locally
+
+## Accounts, discovery, editing, and reading tools
+
+See [Library features and setup](docs/library-features.md) for the database
+upgrade, editor account setup, draft workflow, personal reading features,
+exports, and validation commands. Existing installations must run
+`npm run migrate` from `backend/` before starting the updated API.
