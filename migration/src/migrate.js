@@ -26,11 +26,30 @@ function parseArgs(argv) {
 function loadBookConfig(bookPath) {
   const config = JSON.parse(fs.readFileSync(bookPath, "utf8"));
   if (!config.slug) throw new Error(`${bookPath}: missing "slug"`);
-  if (!config.sourceDir) throw new Error(`${bookPath}: missing "sourceDir"`);
-  if (!fs.existsSync(config.sourceDir)) {
-    throw new Error(`${bookPath}: sourceDir does not exist: ${config.sourceDir}`);
+
+  // A book's source is either a single consolidated markdown file
+  // (sourceFile - see buildOutlineFlatChapters.js's splitSingleFile) or a
+  // directory of *_page_NNNN.md files (sourceDir). sourceDir is optional in
+  // the config itself when it's the latter - a new book's config can omit
+  // it entirely and just rely on UPLOAD_BOOK_PATH (see .env.example), so
+  // migrating a new book never means hand-editing an absolute path into its
+  // JSON. An explicit sourceDir in the config still wins, so existing book
+  // configs that already hardcode one keep working unchanged.
+  if (config.sourceFile) {
+    if (!fs.existsSync(config.sourceFile)) {
+      throw new Error(`${bookPath}: sourceFile does not exist: ${config.sourceFile}`);
+    }
+    return config;
   }
-  return config;
+
+  const sourceDir = config.sourceDir || process.env.UPLOAD_BOOK_PATH;
+  if (!sourceDir) {
+    throw new Error(`${bookPath}: missing "sourceDir"/"sourceFile" (and UPLOAD_BOOK_PATH is not set in .env)`);
+  }
+  if (!fs.existsSync(sourceDir)) {
+    throw new Error(`${bookPath}: sourceDir does not exist: ${sourceDir}`);
+  }
+  return { ...config, sourceDir };
 }
 
 function buildChapters(config) {
@@ -82,6 +101,7 @@ function countBlocks(chapters) {
 // folder under the backend's static image root so two books' identically-
 // named page images (`_page_0_Picture_10.*`) don't collide.
 function resolveAndCopyImages(chapters, config) {
+  if (!config.sourceDir) return; // sourceFile books (a single consolidated .md) carry no images directory
   const sourceImagesDir = path.join(config.sourceDir, "images");
   if (!fs.existsSync(sourceImagesDir)) return;
 

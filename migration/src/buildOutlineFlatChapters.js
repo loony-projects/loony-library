@@ -8,11 +8,41 @@ function normalizeHeadingText(text) {
   return text.trim().toLowerCase().replace(/\.+$/, "");
 }
 
+// { file, page } for each *_page_NNNN.md in a directory - the original
+// per-page-file source shape (one file per PDF page).
 function listPages(rootDir) {
   return fs
     .readdirSync(rootDir)
     .filter((f) => PAGE_FILE_RE.test(f))
     .map((f) => ({ file: f, page: Number(f.match(PAGE_FILE_RE)[1]) }))
+    .sort((a, b) => a.page - b.page);
+}
+
+// A single consolidated markdown file marks each original PDF page with its
+// own "## <label> - PDF page N" heading (e.g. "## Glossary entries - PDF
+// page 42") rather than being split into one file per page. Splitting on
+// that marker recovers the same { page, content } shape listPages()+
+// fs.readFileSync() would have produced, so the rest of this strategy
+// (front matter pages, explicit chapter startPage, everything) doesn't need
+// to know which source shape it's dealing with.
+const SINGLE_FILE_PAGE_MARKER_RE = /^##\s+.+-\s*PDF page\s+(\d+)\s*$/;
+
+function splitSingleFile(sourceFile) {
+  const lines = fs.readFileSync(sourceFile, "utf8").split("\n");
+  const pages = [];
+  let current = null;
+  for (const line of lines) {
+    const match = line.trim().match(SINGLE_FILE_PAGE_MARKER_RE);
+    if (match) {
+      if (current) pages.push(current);
+      current = { page: Number(match[1]), lines: [] };
+      continue;
+    }
+    current?.lines.push(line);
+  }
+  if (current) pages.push(current);
+  return pages
+    .map(({ page, lines }) => ({ file: `page-${page}`, page, content: lines.join("\n") }))
     .sort((a, b) => a.page - b.page);
 }
 
@@ -132,9 +162,13 @@ function createNumberedSink(chapterTitle) {
  * every heading into subheading blocks on one section per chapter (see
  * createFlatSink) - for books whose headings can't be trusted to carry
  * real, complete numbering.
+ *
+ * The source itself can be either shape: a directory of *_page_NNNN.md
+ * files (rootDir), or a single consolidated file with "## ... - PDF page N"
+ * markers (config.sourceFile) - see splitSingleFile, above.
  */
 export function buildOutlineFlatChapters(rootDir, config) {
-  const pages = listPages(rootDir);
+  const pages = config.sourceFile ? splitSingleFile(config.sourceFile) : listPages(rootDir);
   const frontMatterPages = new Map((config.frontMatter ?? []).map((f) => [f.page, f.title]));
   const chapters = [...config.chapters].sort((a, b) => a.startPage - b.startPage);
 
@@ -176,8 +210,8 @@ export function buildOutlineFlatChapters(rootDir, config) {
   let activeSink = null; // the sink of whichever chapter is currently open
   let chapterStartPage = null; // startPage of the currently open chapter, to know when we've just entered it
 
-  for (const { file, page } of pages) {
-    const items = parseFile(fs.readFileSync(path.join(rootDir, file), "utf8"));
+  for (const { file, page, content } of pages) {
+    const items = parseFile(content ?? fs.readFileSync(path.join(rootDir, file), "utf8"));
 
     if (frontMatterPages.has(page)) {
       const title = frontMatterPages.get(page);
