@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Loony Library</title>
+    <meta name="theme-color" content="#faf8f5" />
+    <script>
+      // Apply the saved theme before first paint to avoid a light flash.
+      try {
+        var s = JSON.parse(localStorage.getItem("reading-settings") || "null");
+        var dark = s ? s.dark : matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
