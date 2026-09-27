@@ -1,14 +1,26 @@
-import { useDialog } from "./useDialog";
 import { useCallback, useRef, useState } from "react";
-import { Loader2, Plus, Upload, X } from "lucide-react";
+import { Check, GripVertical, ImagePlus, Loader2, Plus, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import BookCover from "./library/BookCover";
+import { InlineMessage } from "./common/States";
 
 const METADATA_FIELDS = [
   { key: "author", label: "Author" },
   { key: "publisher", label: "Publisher" },
   { key: "isbn", label: "ISBN" },
   { key: "edition", label: "Edition" },
-  { key: "published_year", label: "Published year" },
-  { key: "price", label: "Price" },
+  { key: "published_year", label: "Published year", inputMode: "numeric" },
+  { key: "price", label: "Price", inputMode: "decimal" },
 ];
 
 // Client-side preview only - the backend derives and uniquifies the real
@@ -20,6 +32,36 @@ function slugPreview(title) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function Steps({ step }) {
+  return (
+    <ol className="flex items-center gap-3 text-[13px]">
+      {["Details", "Chapters"].map((label, i) => {
+        const n = i + 1;
+        const done = step > n;
+        const active = step === n;
+        return (
+          <li key={label} className="flex items-center gap-3">
+            {i > 0 && <span className="h-px w-8 bg-border" />}
+            <span className={cn("flex items-center gap-2", active || done ? "text-foreground" : "text-muted-foreground")}>
+              <span
+                className={cn(
+                  "flex size-5 items-center justify-center rounded-full text-[11px] font-semibold transition-colors",
+                  active && "bg-primary text-primary-foreground",
+                  done && "bg-primary-soft text-primary-soft-foreground",
+                  !active && !done && "bg-secondary text-muted-foreground",
+                )}
+              >
+                {done ? <Check className="size-3" strokeWidth={3} /> : n}
+              </span>
+              <span className={cn(active && "font-medium")}>{label}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 /**
@@ -66,9 +108,10 @@ export default function BookWizard({ onFinish, onCancel }) {
   }
 
   const requestCancel = useCallback(() => {
+    if (saving) return;
     if (dirty && !window.confirm("Discard this new book?")) return;
     onCancel();
-  }, [dirty, onCancel]);
+  }, [dirty, onCancel, saving]);
 
   async function finish() {
     setSaving(true);
@@ -81,183 +124,178 @@ export default function BookWizard({ onFinish, onCancel }) {
     }
   }
 
-  const dialogRef = useDialog(requestCancel);
+  const previewBook = {
+    slug: slugPreview(title) || "new-book",
+    title: title.trim() || "Untitled",
+    author: fields.author,
+  };
 
   return (
-    <div
-      ref={dialogRef}
-      role="dialog"
-      aria-modal="true"
-      aria-label="New book"
-      className="dialog-overlay"
-      onMouseDown={(e) => e.target === e.currentTarget && requestCancel()}
-    >
-      <div className="wizard">
-        <div className="wizard-header">
-          <h2 className="dialog-heading">New book</h2>
-          <div className="wizard-steps">
-            <span className={`wizard-step${step === 1 ? " active" : ""}`}>
-              1. Details
-            </span>
-            <span className={`wizard-step${step === 2 ? " active" : ""}`}>
-              2. Chapters
-            </span>
+    <Dialog open onOpenChange={(open) => !open && requestCancel()}>
+      <DialogContent
+        className="flex max-h-[min(46rem,calc(100dvh-2rem))] max-w-2xl flex-col gap-0 p-0 sm:p-0"
+        onInteractOutside={(e) => dirty && e.preventDefault()}
+      >
+        <DialogHeader className="border-b px-6 pb-5 pt-6 sm:px-8 sm:pt-7">
+          <DialogTitle>New book</DialogTitle>
+          <DialogDescription className="sr-only">
+            Add details and opening chapters for a new book.
+          </DialogDescription>
+          <div className="mt-3">
+            <Steps step={step} />
           </div>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+          {step === 1 && (
+            <div className="grid gap-8 sm:grid-cols-[9.5rem_1fr]">
+              <div className="mx-auto w-36 sm:mx-0 sm:w-full">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative block w-full rounded-[3px_7px_7px_3px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
+                  aria-label={coverPreview ? "Change cover image" : "Upload cover image"}
+                >
+                  {coverPreview ? (
+                    <div className="relative aspect-[2/3] overflow-hidden rounded-[3px_7px_7px_3px] shadow-book">
+                      <img src={coverPreview} alt="Cover preview" className="size-full object-cover" />
+                    </div>
+                  ) : (
+                    <BookCover book={previewBook} />
+                  )}
+                  <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 rounded-[inherit] bg-black/45 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <ImagePlus className="size-5" />
+                    {coverPreview ? "Change cover" : "Upload cover"}
+                  </span>
+                </button>
+                <p className="mt-2.5 text-center text-xs text-muted-foreground">
+                  PNG, JPEG or WebP
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={handleCoverChange}
+                />
+              </div>
+
+              <div className="grid content-start gap-5">
+                <Field
+                  label="Title"
+                  htmlFor="wizard-title"
+                  hint={title.trim() ? `URL: /${slugPreview(title)}` : undefined}
+                >
+                  <Input
+                    id="wizard-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    autoFocus
+                    required
+                    className="h-11 font-serif text-lg"
+                  />
+                </Field>
+                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+                  {METADATA_FIELDS.map((f) => (
+                    <Field key={f.key} label={f.label} htmlFor={`wizard-${f.key}`}>
+                      <Input
+                        id={`wizard-${f.key}`}
+                        inputMode={f.inputMode}
+                        value={fields[f.key] || ""}
+                        onChange={(e) => setField(f.key, e.target.value)}
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="grid gap-5">
+              <p className="text-[15px] text-muted-foreground">
+                Add your opening chapter titles now, or skip and add them later from the book’s contents.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  aria-label="Chapter title"
+                  placeholder="Chapter title…"
+                  value={chapterInput}
+                  onChange={(e) => setChapterInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addChapter();
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10"
+                  onClick={addChapter}
+                  disabled={!chapterInput.trim()}
+                >
+                  <Plus />
+                  Add
+                </Button>
+              </div>
+              {chapters.length > 0 ? (
+                <ol className="divide-y rounded-lg border">
+                  {chapters.map((c, i) => (
+                    <li key={i} className="group flex items-center gap-3 px-3 py-2.5 text-sm">
+                      <GripVertical className="size-4 text-muted-foreground/50" />
+                      <span className="w-6 text-right tabular-nums text-muted-foreground">{i + 1}.</span>
+                      <span className="min-w-0 flex-1 truncate">{c}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => removeChapter(i)}
+                        aria-label={`Remove ${c}`}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X />
+                      </Button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+                  No chapters yet
+                </p>
+              )}
+            </div>
+          )}
+          {error && <InlineMessage tone="error" className="mt-5">{error}</InlineMessage>}
         </div>
 
-        {step === 1 && (
-          <div className="wizard-body">
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="Upload cover image"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  fileInputRef.current?.click();
-                }
-              }}
-              className="wizard-cover-upload"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {coverPreview ? (
-                <img src={coverPreview} alt="Cover preview" />
-              ) : (
-                <>
-                  <Upload size={20} />
-                  <span>Choose cover image</span>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                hidden
-                onChange={handleCoverChange}
-              />
-            </div>
-
-            <label className="dialog-label">
-              Title *
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                autoFocus
-                required
-              />
-            </label>
-
-            <div className="wizard-field-grid">
-              {METADATA_FIELDS.map((f) => (
-                <label className="dialog-label" key={f.key}>
-                  {f.label}
-                  <input
-                    type="text"
-                    value={fields[f.key] || ""}
-                    onChange={(e) => setField(f.key, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-
-            {title.trim() && (
-              <p className="wizard-slug-preview">URL: /{slugPreview(title)}</p>
-            )}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="wizard-body">
-            <p className="wizard-hint">
-              Add your first chapter titles now, or skip and add them later.
-            </p>
-            <div className="wizard-chapter-input">
-              <input
-                type="text"
-                placeholder="Chapter title…"
-                value={chapterInput}
-                onChange={(e) => setChapterInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addChapter();
-                  }
-                }}
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={addChapter}
-                disabled={!chapterInput.trim()}
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-            {chapters.length > 0 && (
-              <ul className="wizard-chapter-list">
-                {chapters.map((c, i) => (
-                  <li key={i}>
-                    <span>
-                      {i + 1}. {c}
-                    </span>
-                    <button type="button" onClick={() => removeChapter(i)}>
-                      <X size={13} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {error && <p className="dialog-error">{error}</p>}
-
-        <div className="dialog-actions">
-          {step === 1 && (
+        <div className="flex items-center justify-between gap-3 border-t bg-muted/40 px-6 py-4 sm:px-8">
+          {step === 1 ? (
             <>
-              <button
-                type="button"
-                className="dialog-cancel"
-                onClick={requestCancel}
-              >
+              <Button type="button" variant="ghost" onClick={requestCancel}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                className="dialog-submit"
-                disabled={!title.trim()}
-                onClick={() => setStep(2)}
-              >
-                Next
-              </button>
+              </Button>
+              <Button type="button" disabled={!title.trim()} onClick={() => setStep(2)}>
+                Continue
+              </Button>
             </>
-          )}
-          {step === 2 && (
+          ) : (
             <>
-              <button
-                type="button"
-                className="dialog-cancel"
-                onClick={() => setStep(1)}
-                disabled={saving}
-              >
+              <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={saving}>
                 Back
-              </button>
-              <button
-                type="button"
-                className="dialog-submit"
-                onClick={finish}
-                disabled={saving}
-              >
-                {saving && <Loader2 size={14} className="md-spin" />}
+              </Button>
+              <Button type="button" onClick={finish} disabled={saving}>
+                {saving && <Loader2 className="animate-spin" />}
                 {saving
                   ? "Creating…"
-                  : `Create book${chapters.length ? ` (${chapters.length} chapters)` : ""}`}
-              </button>
+                  : `Create book${chapters.length ? ` · ${chapters.length} chapter${chapters.length === 1 ? "" : "s"}` : ""}`}
+              </Button>
             </>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,13 +1,24 @@
-import { useDialog } from "./useDialog";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { InlineMessage } from "./common/States";
 
 /**
- * A small centered modal for creating a book, chapter, or section - just
- * enough to name and place the new item. Writing a section's content
- * happens afterward in the full-screen MarkdownEditor (see Layout.jsx and
- * Library.jsx), so this dialog stays minimal: a title, plus one optional
- * extra field the caller can ask for (a chapter's number, a book's author).
+ * A small centered modal for creating a chapter or section - just enough
+ * to name and place the new item. Writing a section's content happens
+ * afterward in the full-screen MarkdownEditor (see Layout.jsx), so this
+ * dialog stays minimal: a title, plus one optional extra field the caller
+ * can ask for (a chapter's number).
  */
 export default function NewItemDialog({
   heading,
@@ -15,16 +26,10 @@ export default function NewItemDialog({
   onCreate,
   onCancel,
 }) {
-  const dialogRef = useDialog(onCancel);
   const [title, setTitle] = useState("");
   const [extraValue, setExtraValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   const submit = useCallback(
     async (e) => {
@@ -48,60 +53,46 @@ export default function NewItemDialog({
   );
 
   return (
-    <div
-      className="dialog-overlay"
-      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
-    >
-      <form
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={heading}
-        className="dialog"
-        onSubmit={submit}
-      >
-        <h2 className="dialog-heading">{heading}</h2>
-        <label className="dialog-label">
-          Title
-          <input
-            ref={inputRef}
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-        </label>
-        {extraField && (
-          <label className="dialog-label">
-            {extraField.label}{" "}
-            <span className="dialog-optional">(optional)</span>
-            <input
-              type="text"
-              value={extraValue}
-              onChange={(e) => setExtraValue(e.target.value)}
+    <Dialog open onOpenChange={(open) => !open && !saving && onCancel()}>
+      <DialogContent className="max-w-[26rem]">
+        <DialogHeader>
+          <DialogTitle>{heading}</DialogTitle>
+          <DialogDescription>
+            You’ll go straight to the editor to write it.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-5" onSubmit={submit}>
+          <Field label="Title" htmlFor="new-item-title">
+            <Input
+              id="new-item-title"
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
             />
-          </label>
-        )}
-        {error && <p className="dialog-error">{error}</p>}
-        <div className="dialog-actions">
-          <button
-            type="button"
-            className="dialog-cancel"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="dialog-submit"
-            disabled={saving || !title.trim()}
-          >
-            {saving && <Loader2 size={14} className="md-spin" />}
-            {saving ? "Creating…" : "Create"}
-          </button>
-        </div>
-      </form>
-    </div>
+          </Field>
+          {extraField && (
+            <Field label={extraField.label} htmlFor="new-item-extra" optional>
+              <Input
+                id="new-item-extra"
+                value={extraValue}
+                onChange={(e) => setExtraValue(e.target.value)}
+                className="w-28"
+              />
+            </Field>
+          )}
+          <InlineMessage tone="error">{error}</InlineMessage>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onCancel} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || !title.trim()}>
+              {saving && <Loader2 className="animate-spin" />}
+              {saving ? "Creating…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
