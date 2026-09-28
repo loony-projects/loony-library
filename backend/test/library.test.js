@@ -3,12 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import pg from "pg";
 import "dotenv/config";
-import { hashPassword, verifyPassword } from "../src/auth.js";
+import { randomBytes } from "node:crypto";
+import { digest } from "../src/auth.js";
 import { zip, crc32 } from "../src/epub.js";
-test("password verification and ZIP checksums", () => {
-  const hash = hashPassword("a strong test password");
-  assert(verifyPassword("a strong test password", hash));
-  assert(!verifyPassword("wrong password", hash));
+test("ZIP checksums", () => {
   assert.equal(crc32(Buffer.from("123456789")), 0xcbf43926);
   assert.equal(
     zip([["mimetype", "application/epub+zip"]]).readUInt32LE(0),
@@ -29,12 +27,23 @@ test("API integration in isolated schema", async () => {
         "utf8",
       ),
     );
-    await pool.query(
-      await fs.readFile(
-        new URL("../migrations/001-library.sql", import.meta.url),
-        "utf8",
-      ),
-    );
+    const migrations = new URL("../migrations/", import.meta.url);
+    for (const name of (await fs.readdir(migrations)).sort())
+      await pool.query(await fs.readFile(new URL(name, migrations), "utf8"));
+    // Sign-in itself goes through loony-auth; tests create the user and
+    // session the OAuth callback would have created.
+    async function signIn(email, name) {
+      const { rows } = await pool.query(
+        "insert into users(auth_subject,email,name) values($1,$2,$3) returning id",
+        [randomBytes(16).toString("hex"), email, name],
+      );
+      const token = randomBytes(32).toString("hex");
+      await pool.query(
+        "insert into sessions values($1,$2,now()+interval '1 hour')",
+        [digest(token), rows[0].id],
+      );
+      return `library_session=${token}`;
+    }
     const { app } = await import("../src/app.js");
     server = app.listen(0);
     await new Promise((resolve) => server.once("listening", resolve));
@@ -62,13 +71,16 @@ test("API integration in isolated schema", async () => {
       };
     }
     assert.equal((await call("POST", "/books", { title: "No" })).status, 403);
-    const account = await call("POST", "/auth/register", {
-      email: "editor@example.com",
-      name: "Editor",
-      password: "a long test password",
+    const callback = await fetch(base + "/api/auth/callback?code=x&state=y", {
+      redirect: "manual",
     });
-    assert.equal(account.status, 200);
-    const cookie = account.cookie;
+    assert.equal(callback.status, 303);
+    assert.match(callback.headers.get("location"), /auth_error=invalid_state/);
+    const cookie = await signIn("editor@example.com", "Editor");
+    assert.equal(
+      (await call("GET", "/auth/me", undefined, cookie)).data.user.role,
+      "reader",
+    );
     assert.equal(
       (await call("POST", "/books", { title: "No" }, cookie)).status,
       403,
@@ -157,12 +169,7 @@ test("API integration in isolated schema", async () => {
       (await call("GET", `/sections/${sid}`)).data.section.draft_markdown,
       undefined,
     );
-    const reader = await call("POST", "/auth/register", {
-      email: "reader@example.com",
-      name: "Reader",
-      password: "another long password",
-    });
-    const rc = reader.cookie;
+    const rc = await signIn("reader@example.com", "Reader");
     assert.equal(
       (await call("POST", `/sections/${sid}/publish`, {}, rc)).status,
       403,

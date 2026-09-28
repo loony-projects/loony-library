@@ -4,9 +4,22 @@ Express API serving Loony Library's book content out of Postgres — any number 
 
 ```sh
 npm install
-cp .env.example .env   # DATABASE_URL, PORT, CORS_ORIGIN
+cp .env.example .env   # DATABASE_URL, PORT, CORS_ORIGIN, loony-auth client settings
+npm run migrate          # applies any migrations/*.sql not yet applied
 npm start                # http://localhost:4000
 ```
+
+## Sign-in (loony-auth)
+
+Accounts live in loony-auth, not here. This backend is an OAuth 2.1 / OpenID Connect client of it:
+
+- `GET /api/auth/login` — open it as a full-page navigation. It redirects to loony-auth's hosted sign-in page, with state, PKCE and a nonce kept in a short-lived HttpOnly `oauth_tx` cookie.
+- `GET /api/auth/callback` — loony-auth redirects back here. The backend exchanges the code using `CLIENT_ID`/`SECRET_KEY`, checks the ID token's signature against loony-auth's JWKS (issuer, audience = `CLIENT_ID`, expiry, nonce), and checks that the access token's `org_id` equals `TENANT_ID`. It then creates or updates the local user by loony-auth subject, sets the `library_session` cookie and redirects back to the frontend the sign-in started from. On any failure it redirects to that frontend's `/?auth_error=...` instead. The cookie isn't named plain `session` because cookies ignore the port, so it would collide with loony-auth's own `session` cookie on `localhost`.
+- `POST /api/auth/logout` and `GET /api/auth/me` work as before. Logging out ends the library session only, not the loony-auth session.
+
+Settings (see `.env.example`): `CORS_ORIGIN` (comma-separated frontend origins; defaults to the Vite dev server, and `.env.example` also lists `vite preview` on 4173), `LOONY_AUTH_URL`, `CLIENT_ID`, `TENANT_ID` (the loony-auth organization id), `SECRET_KEY` and `OAUTH_REDIRECT_URI` (must exactly match the redirect URI registered for the client). Keep the real `SECRET_KEY` in `.env`, which is gitignored. Never put it in `.env.example`.
+
+Roles stay local: everyone who signs in starts as a `reader`. After someone has signed in once, promote them with `npm run editor -- their@email`.
 
 ## Endpoints
 

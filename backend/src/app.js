@@ -9,7 +9,7 @@ import { router as sectionsRouter } from "./routes/sections.js";
 import { router as searchRouter } from "./routes/search.js";
 import { router as referenceRouter } from "./routes/reference.js";
 
-import { authenticate, authRouter, editor } from "./auth.js";
+import { authenticate, authRouter, editor, frontendOrigins } from "./auth.js";
 import { featuresRouter, visibility } from "./features.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +20,7 @@ export const app = express();
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    origin: frontendOrigins(),
     credentials: true,
   }),
 );

@@ -11,11 +11,14 @@ Already loaded per [migration.md](./migration.md): schema applied, content loade
 ```sh
 cd backend
 npm install
-cp .env.example .env   # set DATABASE_URL to match your Postgres
+cp .env.example .env   # set DATABASE_URL, plus CLIENT_ID / TENANT_ID / SECRET_KEY from loony-auth
+npm run migrate
 npm start                # http://localhost:4000
 ```
 
 Sanity check: `curl http://localhost:4000/api/health` → `{"ok":true}`.
+
+Sign-in goes through loony-auth, so its `auth-api` has to be running (default `http://localhost:8450`) with this app registered as an OAuth client whose redirect URI is `http://localhost:4000/api/auth/callback`. See [backend/README.md](../backend/README.md#sign-in-loony-auth).
 
 ## 3. Frontend
 
@@ -44,6 +47,5 @@ CORS on the backend is locked to `CORS_ORIGIN` (defaults to the Vite dev origin)
 
 ## Not built yet
 
-- Auth / admin editing (the design in [app_idea.md](./app_idea.md) leaves room for this, not implemented)
 - Deployment (Docker, hosting, env for production Postgres)
 - Automated tests

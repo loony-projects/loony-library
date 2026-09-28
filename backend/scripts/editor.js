@@ -5,13 +5,13 @@ if (!email) {
   process.exitCode = 1;
 } else {
   const { rowCount } = await pool.query(
-    "update users set role='editor' where email=$1",
+    "update users set role='editor' where email=$1 and auth_subject is not null",
     [email.trim().toLowerCase()],
   );
   console.log(
     rowCount
       ? "Editor access granted"
-      : "No account with that email. Register first.",
+      : "No account with that email. Sign in once with loony-auth first.",
   );
   if (!rowCount) process.exitCode = 1;
 }
