@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { LogOut, UserRound } from "lucide-react";
+import { LogOut, ShieldCheck, UserRound } from "lucide-react";
 import { api, API_URL } from "../api";
 import { initials } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -81,11 +81,19 @@ export default function AccountMenu() {
           </Badge>
         </div>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href={`${API_URL}/api/auth/account`}>
+            <ShieldCheck />
+            Account security
+          </a>
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={async () => {
-            await api.post("/api/auth/logout", {});
+            const d = await api.post("/api/auth/logout", {});
             setUser(null);
-            window.location.reload();
+            // Also sign out of loony-auth, which then sends the browser back.
+            if (d?.logoutUrl) window.location.assign(d.logoutUrl);
+            else window.location.reload();
           }}
         >
           <LogOut />

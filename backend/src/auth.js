@@ -231,6 +231,9 @@ authRouter.get("/auth/callback", async (req, res, next) => {
   }
 });
 
+// Ends the library session, then hands back loony-auth's end-session URL:
+// the frontend navigates there so the loony-auth session ends too (single
+// sign-out), and loony-auth sends the browser back to /auth/logged-out.
 authRouter.post("/auth/logout", async (req, res, next) => {
   const token = readCookie(req, SESSION_COOKIE);
   try {
@@ -240,6 +243,49 @@ authRouter.post("/auth/logout", async (req, res, next) => {
     return next(error);
   }
   res.setHeader("Set-Cookie", cookie("", 0));
-  res.json({ ok: true });
+  let logoutUrl;
+  try {
+    const cfg = config();
+    const { meta } = await discover(cfg.authUrl);
+    if (meta.end_session_endpoint) {
+      const origin = frontendOrigins().includes(req.headers.origin)
+        ? req.headers.origin
+        : frontendOrigins()[0];
+      const url = new URL(meta.end_session_endpoint);
+      url.search = new URLSearchParams({
+        client_id: cfg.clientId,
+        // Must share an origin with the registered redirect URI (loony-auth
+        // checks this), so it lives next to /auth/callback.
+        post_logout_redirect_uri: new URL("/api/auth/logged-out", cfg.redirectUri).toString(),
+        state: origin,
+      }).toString();
+      logoutUrl = url.toString();
+    }
+  } catch (e) {
+    // loony-auth unreachable or not configured: the library session is
+    // still gone, which is what matters here.
+    console.error("loony-auth end-session URL unavailable:", e.message);
+  }
+  res.json({ ok: true, logoutUrl });
+});
+
+// loony-auth's end-session endpoint comes back here; `state` is the
+// frontend the sign-out started from, re-checked against the allowlist.
+authRouter.get("/auth/logged-out", (req, res) => {
+  const origin = frontendOrigins().includes(req.query.state)
+    ? req.query.state
+    : frontendOrigins()[0];
+  res.redirect(303, `${origin}/`);
+});
+
+// "Account security" in the account menu: loony-auth's own page for phones,
+// authenticator apps and recovery codes, for this app's organization.
+authRouter.get("/auth/account", (req, res, next) => {
+  try {
+    const cfg = config();
+    res.redirect(303, `${cfg.authUrl}/account?client_id=${encodeURIComponent(cfg.clientId)}`);
+  } catch (e) {
+    next(e);
+  }
 });
 authRouter.get("/auth/me", (req, res) => res.json({ user: req.user || null }));
