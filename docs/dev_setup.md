@@ -4,7 +4,7 @@ Three pieces: [book-import/](../book-import/) (one-off, already run — see [mig
 
 ## 1. Database
 
-Already loaded per [migration.md](./migration.md): schema applied, content loaded into a local Postgres database (`loony_library`). Re-run `cd book-import && npm run load` only if the source markdown changes and you want to reload.
+Already loaded per [migration.md](./migration.md): schema applied, content loaded into a local Postgres database (`loony_library`). Re-run `cd book-import && npm run load -- <markdown-dir>` only if the source markdown changes and you want to reload.
 
 ## 2. Backend
 

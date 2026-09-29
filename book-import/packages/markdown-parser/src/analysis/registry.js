@@ -7,7 +7,7 @@
 // doesn't parse is a normal result (complete: false, syntaxErrors).
 //
 // Registration is synchronous and loading is lazy (an analyzer loads its
-// parser on first use), so parseBook() can report syntaxAnalysisSupported
+// parser on first use), so parseBookDirectory() can report syntaxAnalysisSupported
 // without loading any parser.
 
 const analyzers = new Map(); // language id -> analyzer

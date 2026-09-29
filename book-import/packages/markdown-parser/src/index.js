@@ -1,13 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildOutlineByNumbering } from "./buildOutlineByNumbering.js";
-import { buildOutlineFlatChapters } from "./buildOutlineFlatChapters.js";
-import { buildOutlineByHeadings } from "./buildOutlineByHeadings.js";
+import { buildOutlineByHeadings, slugify } from "./buildOutlineByHeadings.js";
+import { buildOutlineByToc } from "./buildOutlineByToc.js";
 import { parseFile } from "./parseFile.js";
-import { extractTermList, collectTerms } from "./extractTermList.js";
+import { collectTerms } from "./extractTermList.js";
 import { finalizeOutline } from "./finalize.js";
 import { createDiagnostics, countBySeverity } from "./diagnostics.js";
-import { normalizeRole } from "./roles.js";
 import "./analysis/index.js"; // registers the built-in analyzers before any parse
 
 // Pipeline (see docs/migration.md):
@@ -18,7 +17,8 @@ import "./analysis/index.js"; // registers the built-in analyzers before any par
 //   and, optionally and asynchronously, 6c analyzeCodeBlocks (analysis/).
 
 export { parseFile, extractItems, astOf } from "./parseFile.js";
-export { buildOutlineByNumbering, buildOutlineFlatChapters, buildOutlineByHeadings };
+export { buildOutlineByNumbering, buildOutlineByHeadings, buildOutlineByToc, slugify };
+export { readTableOfContents } from "./toc.js";
 export { extractTermList, extractTermEntries, collectTerms, termKey } from "./extractTermList.js";
 export { registerLanguage, normalizeLanguage, parseFenceInfo, getLanguage, listLanguages } from "./languages.js";
 export { analyzeCodeBlocks, registerAnalyzer, unregisterAnalyzer, getAnalyzer, hasAnalyzer } from "./analysis/index.js";
@@ -26,142 +26,109 @@ export { formatDiagnostic, countBySeverity, printDiagnostics } from "./diagnosti
 export { ROLES, normalizeRole } from "./roles.js";
 export { parseHeadingText } from "./headings.js";
 
-const STRATEGIES = ["numbering", "flat-chapters", "headings"];
+// A book is a directory of Markdown - typically pdf-to-md output
+// (<name>_page_NNNN.md files, <name>_metadata.json, images/). Everything
+// about the book comes from that directory; there is no per-book config.
+//
+// Structure, in order of preference:
+//   - NNN_Name/ chapter subdirectories -> "numbering" (buildOutlineByNumbering.js)
+//   - otherwise every *.md directly in it, in numeric-aware name order
+//     ("page_2" before "page_10"), and then:
+//     - a contents page ("Contents", "Table of Contents", ...) whose
+//       chapters can be placed -> "toc" (toc.js, buildOutlineByToc.js)
+//     - else heading levels -> "headings" (buildOutlineByHeadings.js)
+const CHAPTER_DIR_RE = /^\d{3}_.+/;
 
-export function loadBookConfig(bookPath) {
-  const config = JSON.parse(fs.readFileSync(bookPath, "utf8"));
-  if (!config.slug) throw new Error(`${bookPath}: missing "slug"`);
-  if (!STRATEGIES.includes(config.strategy)) {
-    throw new Error(`${bookPath}: "strategy" must be one of ${STRATEGIES.join(", ")} (got ${JSON.stringify(config.strategy)})`);
+function readMetadataName(sourceDir, files, diagnostics) {
+  const metaFile = files.find((f) => f.endsWith("_metadata.json"));
+  if (!metaFile) return null;
+  try {
+    const name = JSON.parse(fs.readFileSync(path.join(sourceDir, metaFile), "utf8"))?.pdf?.name;
+    return typeof name === "string" && name.trim() ? name.replace(/\.pdf$/i, "") : null;
+  } catch (err) {
+    diagnostics.warning("source.bad_metadata", `${metaFile} is not valid JSON (${err.message}); title taken from the folder name.`, {
+      file: metaFile,
+    });
+    return null;
   }
-
-  // A book's source is either a single consolidated markdown file
-  // (sourceFile - see buildOutlineFlatChapters.js's splitSingleFile) or a
-  // directory of *_page_NNNN.md files (sourceDir). sourceDir is optional in
-  // the config itself when it's the latter - a new book's config can omit
-  // it entirely and just rely on UPLOAD_BOOK_PATH (see .env.example), so
-  // migrating a new book never means hand-editing an absolute path into its
-  // JSON. An explicit sourceDir in the config still wins, so existing book
-  // configs that already hardcode one keep working unchanged.
-  if (config.sourceFile) {
-    if (!fs.existsSync(config.sourceFile)) {
-      throw new Error(`${bookPath}: sourceFile does not exist: ${config.sourceFile}`);
-    }
-    return config;
-  }
-
-  const sourceDir = config.sourceDir || process.env.UPLOAD_BOOK_PATH;
-  if (!sourceDir) {
-    throw new Error(`${bookPath}: missing "sourceDir"/"sourceFile" (and UPLOAD_BOOK_PATH is not set in .env)`);
-  }
-  if (!fs.existsSync(sourceDir)) {
-    throw new Error(`${bookPath}: sourceDir does not exist: ${sourceDir}`);
-  }
-  return { ...config, sourceDir };
 }
 
-// Markdown files of a "headings" book, in reading order: config.files if
-// given (paths relative to sourceDir), else every *.md directly in sourceDir
-// sorted by name with numeric awareness ("2-x.md" before "10-y.md").
-function headingsSources(config) {
-  if (config.sourceFile) {
-    return [{ file: path.basename(config.sourceFile), source: fs.readFileSync(config.sourceFile, "utf8") }];
+// Title: the PDF name from <name>_metadata.json, else the folder name (its
+// parent's when the folder is just "markdown"), underscores as spaces.
+function bookMetadata(sourceDir, files, overrides, diagnostics) {
+  const folder = path.basename(sourceDir).toLowerCase() === "markdown" ? path.basename(path.dirname(sourceDir)) : path.basename(sourceDir);
+  const title = overrides.title ?? (readMetadataName(sourceDir, files, diagnostics) ?? folder).replace(/_+/g, " ").trim();
+  return { slug: overrides.slug ?? slugify(title), title, author: overrides.author ?? null, sourceDir };
+}
+
+/**
+ * Parses a book's Markdown directory into the outline the migration package
+ * loads into Postgres. Synchronous; code blocks come back with
+ * analysisStatus "unanalysed" - run analyzeCodeBlocks() for syntax analysis.
+ *   overrides: { title?, slug?, author? } - otherwise derived from the directory.
+ */
+export function parseBookDirectory(dir, overrides = {}) {
+  if (!dir) throw new Error("A Markdown directory is required");
+  const sourceDir = path.resolve(dir);
+  if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+    throw new Error(`Not a directory: ${sourceDir}`);
   }
-  const files =
-    config.files ??
-    fs
-      .readdirSync(config.sourceDir)
-      .filter((f) => f.endsWith(".md"))
+  const diagnostics = createDiagnostics();
+  const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+  const book = bookMetadata(sourceDir, entries.map((e) => e.name), overrides, diagnostics);
+
+  let chapters;
+  if (entries.some((e) => e.isDirectory() && CHAPTER_DIR_RE.test(e.name))) {
+    book.strategy = "numbering";
+    chapters = buildOutlineByNumbering(sourceDir, { diagnostics });
+  } else {
+    const files = entries
+      .filter((e) => e.isFile() && e.name.endsWith(".md"))
+      .map((e) => e.name)
       .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
-  return files.map((file) => ({ file, source: fs.readFileSync(path.join(config.sourceDir, file), "utf8") }));
+    const sources = files.map((file) => ({ file, source: fs.readFileSync(path.join(sourceDir, file), "utf8") }));
+    const pages = parseSources(sources, diagnostics);
+    chapters = buildOutlineByToc(pages, { diagnostics });
+    book.strategy = chapters ? "toc" : "headings";
+    chapters ??= buildOutlineByHeadings(pages, book, { diagnostics });
+  }
+  return assemble(book, chapters, diagnostics);
 }
 
 function parseSources(sources, diagnostics) {
   return sources.map(({ file, source }) => ({ file, items: parseFile(source, { file, diagnostics }) }));
 }
 
-function buildChapters(config, ctx) {
-  if (config.strategy === "flat-chapters") return buildOutlineFlatChapters(config.sourceDir, config, ctx);
-  if (config.strategy === "numbering") return buildOutlineByNumbering(config.sourceDir, ctx);
-  return buildOutlineByHeadings(parseSources(headingsSources(config), ctx.diagnostics), config, ctx);
-}
-
-// config.roles: { "<chapter slug>": "<role>" } - explicit per-book roles for
-// strategies whose source has no role syntax (e.g. { "016_Appendix": "appendix" }).
-function applyConfigRoles(chapters, config, diagnostics) {
-  for (const [slug, value] of Object.entries(config.roles ?? {})) {
-    const role = normalizeRole(value);
-    const chapter = chapters.find((c) => c.slug === slug);
-    if (!role) diagnostics.warning("config.unknown_role", `roles["${slug}"]: "${value}" is not a known role.`, {});
-    else if (!chapter) diagnostics.warning("config.unknown_chapter", `roles["${slug}"]: no chapter with that slug.`, {});
-    else chapter.role = role;
-  }
-}
-
-function termFileEntries(config, key, diagnostics) {
-  const name = config[key];
-  if (!name) return [];
-  const baseDir = config.sourceDir ?? path.dirname(config.sourceFile ?? ".");
-  const filePath = path.resolve(baseDir, name);
-  if (!fs.existsSync(filePath)) {
-    diagnostics.error("source.missing_file", `${key} ${name} does not exist.`, { file: name });
-    return [];
-  }
-  return extractTermList(fs.readFileSync(filePath, "utf8"), { file: name, diagnostics }).map((entry) => ({
-    ...entry,
-    ownerId: null,
-    blockId: null,
-    chapterId: null,
-  }));
-}
-
-function buildReferences(config, termSources, diagnostics) {
-  const glossary = collectTerms([...termFileEntries(config, "glossaryFile", diagnostics), ...termSources.glossary], {
-    kind: "glossary",
-    diagnostics,
-  });
+// Glossary and symbol entries come from elements marked {.glossary} /
+// {.symbols} (see finalize.js / extractTermList.js).
+function buildReferences(termSources, diagnostics) {
+  const glossary = collectTerms(termSources.glossary, { kind: "glossary", diagnostics });
   // Symbols are compared case-sensitively ("N" and "n" are different symbols).
-  const symbols = collectTerms([...termFileEntries(config, "symbolsFile", diagnostics), ...termSources.symbols], {
-    kind: "symbols",
-    caseSensitive: true,
-    diagnostics,
-  }).map(({ term, expansion, ...rest }) => ({ symbol: term, description: expansion, ...rest }));
+  const symbols = collectTerms(termSources.symbols, { kind: "symbols", caseSensitive: true, diagnostics }).map(
+    ({ term, expansion, ...rest }) => ({ symbol: term, description: expansion, ...rest })
+  );
   return { glossary, symbols };
 }
 
-function assemble(config, chapters, diagnostics) {
-  applyConfigRoles(chapters, config, diagnostics);
+function assemble(book, chapters, diagnostics) {
   const { codeBlocks, termSources } = finalizeOutline(chapters, { diagnostics });
-  const { glossary, symbols } = buildReferences(config, termSources, diagnostics);
-  return { book: config, chapters, glossary, symbols, codeBlocks, diagnostics: diagnostics.list };
+  const { glossary, symbols } = buildReferences(termSources, diagnostics);
+  return { book, chapters, glossary, symbols, codeBlocks, diagnostics: diagnostics.list };
 }
 
 /**
- * Parses a loaded book config (see loadBookConfig) into the outline the
- * migration package loads into Postgres. Synchronous; code blocks come back
- * with analysisStatus "unanalysed" - run analyzeCodeBlocks() for syntax
- * analysis.
- */
-export function parseBook(config) {
-  const diagnostics = createDiagnostics();
-  const chapters = buildChapters(config, { diagnostics });
-  return assemble(config, chapters, diagnostics);
-}
-
-/**
- * Parses Markdown directly (no config file, no filesystem) with the
- * "headings" strategy.
+ * Parses Markdown directly (no filesystem) with the "headings" strategy.
  *   input:   a Markdown string, or [{ file, source }] in reading order
- *   options: { metadata?: object, chapterLevel?: number, roles?: object }
+ *   options: { file?, metadata?: object, chapterLevel?: number }
  */
 export function parseBookMarkdown(input, options = {}) {
   const diagnostics = createDiagnostics();
   const sources = typeof input === "string" ? [{ file: options.file ?? null, source: input }] : input;
-  const config = { strategy: "headings", ...options.metadata, chapterLevel: options.chapterLevel, roles: options.roles };
-  const chapters = buildOutlineByHeadings(parseSources(sources, diagnostics), config, { diagnostics });
-  const result = assemble(config, chapters, diagnostics);
-  result.book = options.metadata ?? {};
-  return result;
+  const book = { ...options.metadata };
+  const chapters = buildOutlineByHeadings(parseSources(sources, diagnostics), { ...book, chapterLevel: options.chapterLevel }, {
+    diagnostics,
+  });
+  return assemble(book, chapters, diagnostics);
 }
 
 export function countBlocks(chapters) {

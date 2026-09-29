@@ -2,7 +2,7 @@
   "name": "@loony-library/markdown-parser",
   "version": "0.1.0",
   "private": true,
-  "description": "Parses a book's Markdown source (driven by a books/<slug>.json config, or a Markdown string) into an outline: chapters/sections with ordered content blocks, glossary, symbols, a code-block index with optional tree-sitter syntax analysis, and diagnostics.",
+  "description": "Parses a book's Markdown directory (or a Markdown string) into an outline: chapters/sections with ordered content blocks, glossary, symbols, a code-block index with optional tree-sitter syntax analysis, and diagnostics.",
   "type": "module",
   "main": "src/index.js",
   "types": "src/index.d.ts",

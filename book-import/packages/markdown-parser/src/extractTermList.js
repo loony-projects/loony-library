@@ -5,10 +5,9 @@ import { plainText } from "./text.js";
 //
 // Recognized entry forms - explicit markers only, never "this looks like a
 // term":
-//   TERM → expansion                 one entry per line, anywhere in a term
-//                                    list source (a glossaryFile/symbolsFile,
-//                                    or a book element whose role is
-//                                    glossary/symbols)
+//   TERM → expansion                 one entry per line, inside a book
+//                                    element whose role is glossary/symbols
+//                                    (or any source passed to extractTermList)
 //   **TERM**: expansion              (also "—" / "–" after the bold term) only
 //                                    inside glossary/symbols elements, where
 //                                    the element's role makes the bold lead-in

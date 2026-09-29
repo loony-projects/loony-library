@@ -4,7 +4,7 @@ import "./treeSitter.js"; // registers the built-in tree-sitter analyzers
 export { registerAnalyzer, unregisterAnalyzer, getAnalyzer, hasAnalyzer } from "./registry.js";
 
 // Stage 6c - optional language-specific analysis over the code-block index
-// built by parseBook(). Separate from (and after) parsing so that parsing
+// built by parseBookDirectory()/parseBookMarkdown(). Separate from (and after) parsing so that parsing
 // stays synchronous and never depends on a parser being loadable.
 //
 // Per record, three independent facts:

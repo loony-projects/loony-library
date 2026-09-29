@@ -5,7 +5,7 @@ Code lives in [book-import/](../book-import/) — an npm workspace of two packag
 - **[packages/markdown-parser](../book-import/packages/markdown-parser/)** (`@loony-library/markdown-parser`) — markdown source → outline `{ book, chapters, glossary, symbols, codeBlocks, diagnostics }`. No database dependency. Public API in [src/index.js](../book-import/packages/markdown-parser/src/index.js), typed in [src/index.d.ts](../book-import/packages/markdown-parser/src/index.d.ts); CLI in [src/cli.js](../book-import/packages/markdown-parser/src/cli.js). The backend's section editor uses the same package ([backend/src/parseMarkdown.js](../backend/src/parseMarkdown.js)), so an edited section is stored in exactly the block shapes an import produces.
 - **[packages/migration](../book-import/packages/migration/)** (`@loony-library/migration`) — imports the parser, then copies images and loads the outline into Postgres. Owns [schema.sql](../book-import/packages/migration/schema.sql); later schema changes are in [backend/migrations/](../backend/migrations/) (`004` adds the parser's newer block types and `role` columns).
 
-It's config-driven: each book gets a small JSON file under [book-import/books/](../book-import/books/) (slug, title/author/..., `sourceDir` or `sourceFile`, and which outline-building strategy to use), so adding a new book doesn't mean editing the tool itself.
+The input is a book's **Markdown directory** — typically pdf-to-md output (`<name>_page_NNNN.md` files, `<name>_metadata.json`, `images/`), e.g. `~/.output/NodeJs/Beginning_Nodejs/markdown`. There is no per-book config: the title comes from `<name>_metadata.json` (the PDF name) or the folder name, the slug from the title (both overridable with `--title` / `--slug`), and the structure strategy from the directory's shape.
 
 ## Pipeline
 
@@ -13,21 +13,21 @@ It's config-driven: each book gets a small JSON file under [book-import/books/](
 |---|---|---|
 | 1. Ingestion | [markdown.js](../book-import/packages/markdown-parser/src/markdown.js) | The only `unified().use(remarkParse).use(remarkGfm)` processor. CommonMark + GFM (tables, footnotes, strikethrough, task lists). Front matter, directives and MDX are **not** enabled — no source uses them. |
 | 2. Traversal + 4. Content | [parseFile.js](../book-import/packages/markdown-parser/src/parseFile.js) | Walks each file's mdast in source order into heading items and content blocks, with source positions. Collects code nested in lists/blockquotes/footnotes. |
-| 3. Structure | `buildOutline*.js` | One strategy per source shape (below) builds chapters → sections. |
+| 3. Structure | [toc.js](../book-import/packages/markdown-parser/src/toc.js), `buildOutline*.js` | Chapters from the book's own contents page when it has one; otherwise from the directory shape or heading levels (below). |
 | 5. References | [extractTermList.js](../book-import/packages/markdown-parser/src/extractTermList.js) | Glossary and symbol entries from the AST, de-duplicated with diagnostics. |
 | 6. Code | [finalize.js](../book-import/packages/markdown-parser/src/finalize.js), [languages.js](../book-import/packages/markdown-parser/src/languages.js), [analysis/](../book-import/packages/markdown-parser/src/analysis/) | Ids, ownership, the `codeBlocks` index, language normalization; optional tree-sitter syntax analysis (`analyzeCodeBlocks`, async). |
 | 7. Validation | [diagnostics.js](../book-import/packages/markdown-parser/src/diagnostics.js) | Authoring problems become diagnostics; parsing throws only for unreadable input or programmer errors. |
-| 8. Output | [index.js](../book-import/packages/markdown-parser/src/index.js) | `parseBook(config)` (sync), `parseBookMarkdown(markdown, options)` (no filesystem), `analyzeCodeBlocks(result)`. |
+| 8. Output | [index.js](../book-import/packages/markdown-parser/src/index.js) | `parseBookDirectory(dir)` (sync), `parseBookMarkdown(markdown, options)` (no filesystem), `analyzeCodeBlocks(result)`. |
 
 Each file is parsed once; ownership is assigned in one pass; all state (diagnostics, slugs, stacks) is local to a parse call. The only module-level state is the language/analyzer registry and the tree-sitter grammar cache.
 
 ## Output invariants
 
 - **Every block has exactly one owner, in source order.** Chapters never hold blocks directly: a chapter's own content before its first subsection is in its first section (role `body`, titled like the chapter). Every top-level markdown node becomes exactly one block, except a figure caption (folded into its image) and whitespace-only HTML. A node with no dedicated type becomes an `unknown` block with its raw markdown — never dropped.
-- **Content outside the outline is always reported.** Pages/files the config deliberately leaves out (`source.page_not_in_outline`, `source.file_not_in_outline`, `source.content_outside_outline`) are warnings, never silent.
+- **Content outside the outline is always reported.** Files a strategy leaves out by design (`source.file_not_in_outline`) are warnings, never silent.
 - **Ids are deterministic and unique:** chapter `ch3`, section `ch3.s0` (pre-order within the chapter), block `ch3.s0.b4`, block inside an HTML wrapper `ch3.s0.b4.1`, nested code `ch3.s0.b5.code0`. The same snippet twice gets two ids. Unchanged source → identical ids.
 - **`codeBlocks` is an index, not a second copy of the tree.** Each record points at its `blockId`, `ownerId` (section) and `chapterId`; `rawCode` is a copy of that block's code. Nested code (inside a list, blockquote, footnote) exists only in the index plus its container block's markdown.
-- **Roles are separate from heading level.** `chapter.role` / `section.role` come only from explicit markup or config (below), never from what a heading's text says. `level` is the markdown heading level; `depth` is tree depth.
+- **Roles are separate from heading level.** `chapter.role` / `section.role` come only from explicit markup (below), never from what a heading's text says. `level` is the markdown heading level; `depth` is tree depth.
 - The mdast node behind each block is available in-process via `astOf(block)` but is not serialized into the outline JSON or the database. Each block keeps its exact source `markdown` (what the frontend renders) and a plain-text `text` (what search indexes).
 
 ### Content block types
@@ -51,13 +51,28 @@ Each file is parsed once; ownership is assigned in one pass; all state (diagnost
 
 ## Book structure strategies
 
-Selected per book by `strategy` in its config. Every strategy accepts `roles: { "<chapter slug>": "<role>" }` to set roles explicitly.
+Chosen in this order: `NNN_Name/` chapter subfolders → `numbering`; a contents page whose chapters can be placed → `toc`; otherwise → `headings`.
+
+### `toc` — **[toc.js](../book-import/packages/markdown-parser/src/toc.js)**, **[buildOutlineByToc.js](../book-import/packages/markdown-parser/src/buildOutlineByToc.js)**
+
+For PDF-converted books, whose heading levels are unreliable (`# Listing 2-5. objectLiterals1.js`, `## Understanding Node.js` for a chapter). The book's own table of contents decides what the chapters are:
+
+1. **Find the contents page** — the first page with a heading that is exactly `Contents`, `Table of Contents`, `Contents at a Glance`, `Brief Contents` or `Chapters` (case and emphasis ignored).
+2. **Read its entries** from that page and the following pages, for as long as each has page-numbered entries (up to 40 pages): table rows, headings, list items (ordered-list numbers restored) and lines ending in a page number (`… 17`, `— 17`, `(xi)`).
+3. **Keep only top-level entries:** `Chapter 3: Title` / `Chapter-III:`, `3 Title` / `3. Title` (single number — `3.1 …` is a sub-entry), `Part II: Title`, `Appendix A: Title`, and other **bold**/heading entries (Preface, Index, About the Author) as front/back matter by position. Chapter numbers must increase; a line that breaks the sequence is ignored (`toc.ignored_entry`). "Contents at a Glance" and a detailed "Contents" listing the same chapters count once.
+4. **Place each entry in the pages:**
+   - *Anchors* — headings exactly matching an entry (`Chapter 3`, or the same title); the longest chain in the same order as the contents is kept, so an entry the PDF prints elsewhere can't derail the rest.
+   - Other entries — a title match near *printed page + the nearest anchor's offset* (±2 pages), else the top of that page (`toc.placed_by_page`). The offset is local: it drifts through a PDF (missing blank pages; *Beginning Node.js* goes from +4 to 0).
+   - An entry listed out of book order ("About the Author" listed first, printed last) goes to its only exact heading (`toc.out_of_order`); an entry past the last page file means an incomplete conversion (`toc.beyond_source`).
+5. **Build elements:** pages before the first entry (cover, the contents itself) are *Front Matter*; each entry runs to the next entry's start. The opening title heading(s) are consumed. Other headings in a chapter become sections — flat, because their levels are unreliable — except dotted numbering (`1.1` → `1.1.2`), which nests.
+
+Falls back to `headings` when there's no contents page or fewer than two chapters can be placed (`toc.insufficient`).
 
 ### `headings` — **[buildOutlineByHeadings.js](../book-import/packages/markdown-parser/src/buildOutlineByHeadings.js)**
 
-For ordinary Markdown books: one `sourceFile`, or every `*.md` in `sourceDir` in numeric-aware name order (or an explicit `files: [...]` list). This is also what `parseBookMarkdown()` uses.
+The fallback. Every `*.md` directly in the directory, in numeric-aware name order (`page_2` before `page_10`), read as one continuous book — a chapter can span many page files. `parseBookMarkdown()` uses the same rules on a string.
 
-1. **Chapter level** = `chapterLevel` in the config, else the shallowest heading level used (ignoring parts). A heading at that level starts a chapter. A book whose `#` is only the title should set `"chapterLevel": 2`.
+1. **Chapter level** = the shallowest heading level used (ignoring parts); `parseBookMarkdown` also accepts a `chapterLevel` option. A heading at that level starts a chapter.
 2. **Explicit roles** — a Pandoc-style class at the end of a heading: `# Preface {.preface}`, `### Appendix A: Tools {.appendix}`. A role heading always starts a top-level element, whatever its level. Unknown classes are reported (`heading.unknown_role`) and left in the title. Roles ([roles.js](../book-import/packages/markdown-parser/src/roles.js)):
    - front matter: `front_matter cover half_title title_page copyright dedication epigraph toc foreword preface introduction prologue acknowledgments`
    - main matter: `part chapter interlude`
@@ -80,25 +95,9 @@ Numbering: `6. Title`, `3.3 Title`, and — for dotted numbers only — `10.1.2T
 
 The loose files directly under `pages/` (`0001_CoverPage.md` etc.) don't go through this generic heading logic at all — several have no real heading of their own (`BookMetadata.md` has none; `CoverPage.md`'s only heading is the author's name). They're curated by hand instead: a fixed `FRONT_MATTER_FILES` list in `buildOutlineByNumbering.js` maps six of them to one flat section each, with a role (Cover Page → `cover`, Publication → `copyright`, Book Metadata → `front_matter`, Foreword, Preface, Acknowledgement → `acknowledgments`), no nesting. In those sections a heading that repeats the section title is dropped; any other heading is kept as a `subheading`. Root files not in the list (a blank page-break file, a dedication page) are excluded by choice and reported as `source.file_not_in_outline`.
 
-### `flat-chapters` — **[buildOutlineFlatChapters.js](../book-import/packages/markdown-parser/src/buildOutlineFlatChapters.js)**
-
-For books that are a flat dump of per-page markdown (raw `pdf-to-md` output, no curated chapter directories) with no numbering scheme in their headings to derive depth from — currently *Jouga Boro Raokhanthi*, and the Rust books. Two problems specific to this shape:
-
-- **Heading level isn't reliable either.** Some subsection headings sit at the exact same `##` level as real chapters — e.g. *Jouga Boro Raokhanthi*'s "बिसुं" (Compound) chapter has six subtypes; one is correctly nested as `### 3. ...` but four others (`## 2. ...`, `## 4. ...`, `## 5. ...`, `## 6. ...`) are marked at chapter level. Distinguishing a real chapter from a mis-leveled subsection by text alone isn't reliable enough to automate with confidence.
-- **A chapter's title heading can be missing outright.** *Jouga Boro Raokhanthi* chapter 19 ("जिरायसिन खान्थि") lost its opening page to a skipped OCR page (`skip_pages` in the pdf-to-md run) — there is no heading anywhere in the source that says its name.
-
-So this strategy doesn't try to detect chapter boundaries from content at all: each book config lists its chapters explicitly as `{ number, slug, title, startPage, role? }`, verified once by hand against the source (and, for *Jouga Boro Raokhanthi*, cross-checked against its own printed table of contents — every chapter's real page-file number is its printed TOC page number + 7, which also independently confirms chapter 19 sat on the skipped page). `frontMatter` entries (`{ page, title, role? }`) are the same idea as `FRONT_MATTER_FILES` above, keyed by page number instead of filename. Pages before the first chapter that aren't listed as front matter are left out and reported (`source.page_not_in_outline`).
-
-The first heading on a chapter's start page is consumed as the chapter marker when it looks like one ("Chapter 3", the chapter title, or text starting with the chapter number); otherwise it's kept as a subheading (`structure.chapter_marker_kept`). A single consolidated `sourceFile` is split at top-level `## ... - PDF page N` headings of its parsed tree, so such a line inside a code block is never a page break; content before the first marker is reported.
-
-What happens *inside* each chapter is a separate, per-book choice — `config.chapterSections`:
-
-- Default (omitted, or any value other than `"numbered"`): every heading inside a chapter, at any level, becomes an in-place `subheading` content block rather than a nav-tree node, so each chapter is **exactly one flat section**. Use this when a book's headings can't be trusted to carry real, complete numbering — *Jouga Boro Raokhanthi*'s case above.
-- `"numbered"`: subsection headings that *do* carry real numbering ("1.1", "1.1.2", ...) become real nested sections instead — same depth-from-numbering idea as the `numbering` strategy, just scoped to one chapter's page range instead of a whole curated folder. An intro section (titled after the chapter) holds whatever content precedes the chapter's first numbered heading. Used for *Comprehensive Rust*, whose ~1400 subsections are reliably numbered even though its 84 top-level chapters are only marked by a separate "Chapter N" heading rather than numbering.
-
 ## Glossary and symbols
 
-Sources: `glossaryFile` / `symbolsFile` in the config (resolved against `sourceDir`, or the directory of `sourceFile`), plus any element or section whose role is `glossary` / `symbols`.
+Sources: any element or section whose role is `glossary` / `symbols` (a heading marked `{.glossary}` / `{.symbols}`).
 
 - **Entry forms** — explicit markers only: `TERM → expansion` (one per line, anywhere in a term source), and inside glossary/symbols *elements* also `**TERM**: expansion` (or `—`/`–`). A bold word in ordinary prose is never a term.
 - Lines come from paragraphs, list items and blockquotes of the AST; **code (fenced, indented, inline), headings, HTML and tables are never scanned**. A line with two arrows is ambiguous and reported (`terms.invalid_entry`).
@@ -118,7 +117,7 @@ Three separate facts per record:
 - `syntaxAnalysisSupported` — an analyzer is registered for it (and could be loaded).
 - `analysisStatus` — for this snippet: `unanalysed` (analysis not run, or the analyzer crashed → `code.analyzer_failed`), `unsupported` (no analyzer / unlabelled / unknown label), `analysed`, `parse_error` (syntax errors; `analysis` keeps partial facts, and `analysis.truncated` is true when the error runs to the end of the snippet — an example cut off by a page break).
 
-`parseBook()` leaves every record `unanalysed`; `analyzeCodeBlocks(result)` (the CLI runs it unless `--no-analyze`) parses each snippet with a real grammar and never executes it.
+`parseBookDirectory()` leaves every record `unanalysed`; `analyzeCodeBlocks(result)` (the CLI runs it unless `--no-analyze`) parses each snippet with a real grammar and never executes it.
 
 | Language | Aliases recognized | Syntax analysis |
 |---|---|---|
@@ -143,18 +142,23 @@ The grammars are WASM builds loaded through `web-tree-sitter` (no native compila
 | Code | Severity | Meaning |
 |---|---|---|
 | `source.empty` | warning | No content at all. |
-| `source.missing_file` | error / warning | A configured glossary/symbols file (error) or listed front-matter file (warning) doesn't exist. |
-| `source.page_not_in_outline`, `source.file_not_in_outline`, `source.content_outside_outline` | warning | Content the config leaves out of the outline. |
+| `source.missing_file` | warning | A `numbering` front-matter file listed in `FRONT_MATTER_FILES` doesn't exist. |
+| `source.bad_metadata` | warning | `<name>_metadata.json` isn't valid JSON; title taken from the folder name. |
+| `source.file_not_in_outline` | warning | `numbering`: a root file not in `FRONT_MATTER_FILES`. |
 | `structure.no_headings` | warning | Whole book kept as one element. |
 | `structure.content_before_first_heading` | info | Kept in a Front Matter element / Untitled section. |
 | `structure.matter_order` | warning | Front/main/back matter out of order. |
 | `structure.duplicate_title` | info | Sibling titles repeat (distinct ids). |
 | `structure.empty_section`, `structure.empty_element` | info | No content. |
-| `structure.chapter_marker_kept` | info | flat-chapters: first heading kept as content. |
 | `heading.empty` | warning | Empty heading (title `Untitled`). |
 | `heading.skipped_level` | info | Level jump, nested one step deeper. |
 | `heading.unknown_role`, `heading.conflicting_roles` | warning | Unusable `{.class}` on a heading. |
 | `block.unknown_node` | info | Kept as an `unknown` block. |
+| `toc.used` | info | Which contents page(s) gave the chapters, and how many entries were placed by title vs. page number. |
+| `toc.placed_by_page`, `toc.out_of_order` | info | How a particular entry was placed. |
+| `toc.unplaced_entry` | warning | An entry couldn't be found; its pages stay with the previous element. |
+| `toc.beyond_source` | warning | An entry's page is past the last page file — incomplete conversion. |
+| `toc.ignored_entry`, `toc.chapter_gap`, `toc.insufficient` | info | Out-of-sequence line ignored; chapter numbers skip; contents unusable (falls back to headings). |
 | `code.unclosed_fence` | warning | Fence never closed. |
 | `code.unknown_language` | info | Unrecognized label. |
 | `code.syntax_error` | info | Snippet has syntax errors (partial facts kept). |
@@ -162,7 +166,6 @@ The grammars are WASM builds loaded through `web-tree-sitter` (no native compila
 | `terms.invalid_entry`, `terms.no_entries` | warning | Ambiguous/empty term line; a term file with no entries. |
 | `glossary.duplicate` / `symbols.duplicate` | info | Same term and definition again. |
 | `glossary.conflict` / `symbols.conflict` | warning | Same term, different definition. |
-| `config.unknown_role`, `config.unknown_chapter` | warning | Bad `roles` entry. |
 
 ## Example
 
@@ -206,14 +209,15 @@ diagnostics: structure.content_before_first_heading, heading.skipped_level, stru
 cd book-import
 npm install            # installs both workspace packages (and the tree-sitter grammars)
 npm test               # parser tests (node --test)
-npm run dry-run -- --book books/<slug>.json   # writes outline.json (with code analysis), no DB needed
+npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown   # writes outline.json (with code analysis), no DB needed
 
 createdb loony_library
 psql "$DATABASE_URL" -f packages/migration/schema.sql
 (cd ../backend && npm run migrate)             # later schema changes, incl. 004 (block types, roles)
 cp .env.example .env   # set DATABASE_URL
-npm run load -- --book books/<slug>.json       # first load
-npm run reload -- --book books/<slug>.json     # re-parse + wipe-and-reload (deletes by title, cascades)
+npm run load -- <markdown-dir> [--category <slug>] [--title T] [--author A]   # first load
+npm run reload -- <markdown-dir>                # re-parse + wipe-and-reload (deletes by title, cascades)
+# with no <markdown-dir>, UPLOAD_BOOK_PATH from .env is used
 ```
 
 After a `reload`, restart the backend — book ids are memoized per-slug for the process lifetime, so it'll keep pointing at the deleted row until it's bounced.
@@ -221,11 +225,13 @@ After a `reload`, restart the backend — book ids are memoized per-slug for the
 ## Verified against the real source
 
 - *Modern Bodo Grammar* (`numbering` strategy): 18 chapters, 298 sections, 1,600 content blocks (177 of them `subheading`), 98 glossary terms, 9 symbols, no crashes. (Source not on this machine when the pipeline was rewritten; covered by fixture tests only since.)
-- *Jouga Boro Raokhanthi* (`flat-chapters` strategy): 22 chapters (plus a front-matter chapter), one flat section each by design, no crashes. (Same caveat.)
-- *Rust Atomics and Locks* (`flat-chapters`): 13 chapters, 24 sections, 1,974 blocks, 186 `rs` code blocks. Compared with the pre-rewrite parser: every earlier block is still present, in order, with identical markdown; 20 headings that used to be dropped silently (front-matter headings, the index's "A") and 5 thematic breaks were added; list/table/blockquote search text now separates items. 104 snippets analysed cleanly, 82 `parse_error` — mostly PDF-conversion artifacts inside code (`*// Error!*`).
-- *Comprehensive Rust* (`flat-chapters`, `numbered`): 85 chapters, 563 sections, 515 code blocks; 286 `parse_error`, 187 of them `truncated` (examples split across PDF pages).
+- *Beginning Node.js* (`toc`): all 18 contents entries placed at their title headings — front matter, Introduction, chapters 1–13, Index, and the three "about" pages the PDF prints at the back. 2,317 blocks, about 0.3s.
+- `toc` across the other converted books in `~/.output`: every entry placed for *Practical Node.js* (21), *Modern Operating Systems* (14), *Programming Python* (27), *The Art of PostgreSQL* (62, with 6 parts), *Comprehensive Rust* (74), *Rust Atomics and Locks* (10), *Learn TypeScript* (21). Partial: *HTTP: The Definitive Guide* 30/37, *Operating System Concepts* 28/37 (contents lines the converter mangled); *Speech and Language Processing* 4/18 and *Designing Data-Intensive Applications* 4/17 are incomplete conversions (reported `toc.beyond_source`).
+- Before per-book configs were removed, the `flat-chapters` strategy was checked on *Rust Atomics and Locks* (no content lost against the previous parser) and *Comprehensive Rust*.
 
 ## Known limitations
+
+- **Books without a usable contents page fall back to heading levels**, which pdf-to-md output often gets wrong (subsections, listings or running heads marked `#`). Mark real structure with `{.role}` classes there. A mangled contents page (*Asynchronous Programming in Rust*: chapter numbers on separate lines from split titles) yields only the entries that could be read. Code that the converter didn't fence (much of *Beginning Node.js*) is ordinary paragraphs, not code blocks.
 
 The source is OCR/PDF-extracted markdown and is inconsistent in places:
 - *Modern Bodo Grammar*: a few headings run two bold spans together with no space (`**10.1.2****Inclusive Particle**`) — the numbering rule tolerates this, but it's worth spot-checking after a load.

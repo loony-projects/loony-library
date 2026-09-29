@@ -3,20 +3,31 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
 import pg from "pg";
-import { loadBookConfig, parseBook, summarize, printDiagnostics, countBySeverity } from "@loony-library/markdown-parser";
+import { parseBookDirectory, summarize, printDiagnostics, countBySeverity } from "@loony-library/markdown-parser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
+// Usage: migrate.js <markdown-dir> [--title T] [--slug S] [--author A]
+//                   [--category <slug>] [--reset] [--allow-errors] [--out outline.json]
+// <markdown-dir> defaults to UPLOAD_BOOK_PATH (see .env.example). Title and
+// slug are otherwise derived from the directory (see parseBookDirectory).
 function parseArgs(argv) {
-  const args = { reset: false, out: null, book: null, allowErrors: false };
+  const args = { dir: null, reset: false, out: null, allowErrors: false, category: null, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--reset") args.reset = true;
-    else if (argv[i] === "--allow-errors") args.allowErrors = true;
-    else if (argv[i] === "--out") args.out = argv[++i];
-    else if (argv[i] === "--book") args.book = argv[++i];
+    const arg = argv[i];
+    if (arg === "--reset") args.reset = true;
+    else if (arg === "--allow-errors") args.allowErrors = true;
+    else if (arg === "--out") args.out = argv[++i];
+    else if (arg === "--category") args.category = argv[++i];
+    else if (arg === "--title") args.overrides.title = argv[++i];
+    else if (arg === "--slug") args.overrides.slug = argv[++i];
+    else if (arg === "--author") args.overrides.author = argv[++i];
+    else if (arg.startsWith("--")) throw new Error(`Unknown option ${arg}`);
+    else args.dir = arg;
   }
-  if (!args.book) throw new Error("--book <path-to-config.json> is required");
+  args.dir ??= process.env.UPLOAD_BOOK_PATH || null;
+  if (!args.dir) throw new Error("Pass the book's Markdown directory (or set UPLOAD_BOOK_PATH in .env)");
   return args;
 }
 
@@ -26,9 +37,8 @@ function parseArgs(argv) {
 // rather than trusting the literal src, then copy it into a book-namespaced
 // folder under the backend's static image root so two books' identically-
 // named page images (`_page_0_Picture_10.*`) don't collide.
-function resolveAndCopyImages(chapters, config) {
-  if (!config.sourceDir) return; // sourceFile books (a single consolidated .md) carry no images directory
-  const sourceImagesDir = path.join(config.sourceDir, "images");
+function resolveAndCopyImages(chapters, book) {
+  const sourceImagesDir = path.join(book.sourceDir, "images");
   if (!fs.existsSync(sourceImagesDir)) return;
 
   const byBasename = new Map();
@@ -36,7 +46,7 @@ function resolveAndCopyImages(chapters, config) {
     byBasename.set(f.replace(/\.[^.]+$/, "").toLowerCase(), f);
   }
 
-  const destDir = path.join(BACKEND_IMAGES_DIR, config.slug);
+  const destDir = path.join(BACKEND_IMAGES_DIR, book.slug);
   fs.mkdirSync(destDir, { recursive: true });
   const copied = new Set();
   let missing = 0;
@@ -51,7 +61,7 @@ function resolveAndCopyImages(chapters, config) {
           missing++;
           continue;
         }
-        block.content.src = `${config.slug}/${real}`;
+        block.content.src = `${book.slug}/${real}`;
         if (!copied.has(real)) {
           fs.copyFileSync(path.join(sourceImagesDir, real), path.join(destDir, real));
           copied.add(real);
@@ -81,7 +91,7 @@ async function loadIntoPostgres(data) {
       const {
         rows: [category],
       } = await client.query("select id from categories where slug = $1", [data.book.category]);
-      if (!category) throw new Error(`Unknown category slug in book config: ${data.book.category}`);
+      if (!category) throw new Error(`Unknown category slug: ${data.book.category}`);
       categoryId = category.id;
     }
 
@@ -196,13 +206,14 @@ async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is not set (see .env.example)");
   }
-  const config = loadBookConfig(args.book);
-  const data = parseBook(config);
+  const data = parseBookDirectory(args.dir, args.overrides);
+  data.book.category = args.category;
+  console.log(`${data.book.title} (${data.book.slug}) from ${data.book.sourceDir} [${data.book.strategy}]`);
   console.log(summarize(data));
   printDiagnostics(data.diagnostics);
   // Warnings and info are authoring issues the outline already works
-  // around; an error means the parse is known to be incomplete (e.g. a
-  // configured glossary file is missing), so don't load it unless asked.
+  // around; an error means the parse is known to be incomplete, so don't
+  // load it unless asked.
   if (countBySeverity(data.diagnostics).error && !args.allowErrors) {
     throw new Error("Parse reported errors (listed above); fix them or pass --allow-errors to load anyway.");
   }
@@ -212,7 +223,7 @@ async function main() {
     console.log(`Wrote ${args.out}`);
   }
 
-  resolveAndCopyImages(data.chapters, config);
+  resolveAndCopyImages(data.chapters, data.book);
   await loadIntoPostgres({ ...data, reset: args.reset });
 }
 

@@ -119,7 +119,7 @@ interface TermSource {
   /** Normalized lookup key (NFKC, whitespace-collapsed; lower-cased for glossary terms). */
   key: string;
   position?: SourcePosition;
-  /** Section / block / chapter the entry came from; null for a glossaryFile/symbolsFile. */
+  /** Section / block / chapter the {.glossary}/{.symbols} element entry came from. */
   ownerId: string | null;
   blockId: string | null;
   chapterId: string | null;
@@ -186,9 +186,20 @@ export interface CodeBlockRecord {
   followUpParagraphId: string | null;
 }
 
+/** Derived from the Markdown directory (see parseBookDirectory); empty-ish for parseBookMarkdown. */
+export interface BookMetadata {
+  slug?: string;
+  title?: string;
+  author?: string | null;
+  /** Absolute path of the Markdown directory. */
+  sourceDir?: string;
+  /** Structure strategy chosen from the directory's shape. */
+  strategy?: "toc" | "headings" | "numbering";
+  [key: string]: unknown;
+}
+
 export interface BookParseResult {
-  /** Book metadata (the book config). */
-  book: Record<string, unknown>;
+  book: BookMetadata;
   chapters: Chapter[];
   glossary: GlossaryEntry[];
   symbols: SymbolEntry[];
@@ -215,12 +226,13 @@ export interface Diagnostics {
   info(code: string, message: string, where?: object): void;
 }
 
-export function loadBookConfig(bookPath: string): Record<string, unknown>;
-export function parseBook(config: Record<string, unknown>): BookParseResult;
+/** Parses a book's Markdown directory (e.g. pdf-to-md output). Throws only if it isn't a directory. */
+export function parseBookDirectory(dir: string, overrides?: { title?: string; slug?: string; author?: string }): BookParseResult;
 export function parseBookMarkdown(
   input: string | { file: string | null; source: string }[],
-  options?: { file?: string; metadata?: Record<string, unknown>; chapterLevel?: number; roles?: Record<string, string> }
+  options?: { file?: string; metadata?: Record<string, unknown>; chapterLevel?: number }
 ): BookParseResult;
+export function slugify(text: string): string;
 export function analyzeCodeBlocks<R extends BookParseResult>(result: R, options?: { diagnostics?: ParseDiagnostic[] }): Promise<R>;
 export function parseFile(source: string, options?: { file?: string | null; diagnostics?: Diagnostics | null }): ParsedItem[];
 export function astOf(item: object): unknown;

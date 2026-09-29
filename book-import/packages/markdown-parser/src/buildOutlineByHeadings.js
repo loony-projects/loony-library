@@ -1,10 +1,11 @@
 import { divisionOf } from "./roles.js";
 
-// Stage 3 - book structure for ordinary Markdown books (strategy
-// "headings"): one file or several, where heading levels plus explicit
-// `{.role}` classes define the structure. Rules (also in docs/migration.md):
+// Stage 3 - book structure for a directory of Markdown files (strategy
+// "headings", the default - see parseBookDirectory): the files are read in
+// order as one continuous book, and heading levels plus explicit `{.role}`
+// classes define the structure. Rules (also in docs/migration.md):
 //
-// 1. Chapter level = config.chapterLevel, else the shallowest heading level
+// 1. Chapter level = options.chapterLevel, else the shallowest heading level
 //    used by any heading that isn't a part. A heading at that level (or
 //    shallower) starts a top-level element with role "chapter".
 // 2. A heading with a `{.role}` class always starts a top-level element with
@@ -36,12 +37,12 @@ export function slugify(text) {
   return slug || "untitled";
 }
 
-export function buildOutlineByHeadings(files, config, { diagnostics }) {
+export function buildOutlineByHeadings(files, options, { diagnostics }) {
   const allItems = files.flatMap(({ file, items }) => items.map((item) => ({ item, file })));
   const headingLevels = allItems
     .filter(({ item }) => item.kind === "heading" && item.role !== "part")
     .map(({ item }) => item.level);
-  const chapterLevel = config.chapterLevel ?? (headingLevels.length ? Math.min(...headingLevels) : 1);
+  const chapterLevel = options.chapterLevel ?? (headingLevels.length ? Math.min(...headingLevels) : 1);
 
   const chapters = [];
   const slugs = new Map();
@@ -100,7 +101,7 @@ export function buildOutlineByHeadings(files, config, { diagnostics }) {
     if (chapter) return;
     if (noHeadings) {
       diagnostics.warning("structure.no_headings", "Book has no headings; all content is kept in one element.", { file });
-      openChapter({ role: "chapter", title: config.title || "Untitled", file, position });
+      openChapter({ role: "chapter", title: options.title || "Untitled", file, position });
     } else {
       diagnostics.info("structure.content_before_first_heading", "Content before the first heading kept in a Front Matter element.", {
         position,

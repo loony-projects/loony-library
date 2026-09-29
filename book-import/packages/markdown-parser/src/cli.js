@@ -1,25 +1,33 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import "dotenv/config";
-import { loadBookConfig, parseBook, analyzeCodeBlocks, summarize, printDiagnostics } from "./index.js";
+import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics } from "./index.js";
 
-// Usage: cli.js --book books/<slug>.json [--out outline.json] [--no-analyze] [--all-diagnostics]
+// Usage: cli.js <markdown-dir> [--out outline.json] [--title T] [--slug S]
+//                              [--no-analyze] [--all-diagnostics]
+// <markdown-dir> defaults to UPLOAD_BOOK_PATH (see .env.example).
 function parseArgs(argv) {
-  const args = { out: "outline.json", book: null, analyze: true, allDiagnostics: false };
+  const args = { dir: null, out: "outline.json", analyze: true, allDiagnostics: false, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--out") args.out = argv[++i];
-    else if (argv[i] === "--book") args.book = argv[++i];
-    else if (argv[i] === "--no-analyze") args.analyze = false;
-    else if (argv[i] === "--all-diagnostics") args.allDiagnostics = true;
+    const arg = argv[i];
+    if (arg === "--out") args.out = argv[++i];
+    else if (arg === "--title") args.overrides.title = argv[++i];
+    else if (arg === "--slug") args.overrides.slug = argv[++i];
+    else if (arg === "--no-analyze") args.analyze = false;
+    else if (arg === "--all-diagnostics") args.allDiagnostics = true;
+    else if (arg.startsWith("--")) throw new Error(`Unknown option ${arg}`);
+    else args.dir = arg;
   }
-  if (!args.book) throw new Error("--book <path-to-config.json> is required");
+  args.dir ??= process.env.UPLOAD_BOOK_PATH || null;
+  if (!args.dir) throw new Error("Pass the book's Markdown directory (or set UPLOAD_BOOK_PATH in .env)");
   return args;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const outline = parseBook(loadBookConfig(args.book));
+  const outline = parseBookDirectory(args.dir, args.overrides);
   if (args.analyze) await analyzeCodeBlocks(outline);
+  console.log(`${outline.book.title} (${outline.book.slug}) from ${outline.book.sourceDir} [${outline.book.strategy}]`);
   console.log(summarize(outline));
   printDiagnostics(outline.diagnostics, { all: args.allDiagnostics });
   fs.writeFileSync(args.out, JSON.stringify(outline, null, 2));

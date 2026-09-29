@@ -10,19 +10,22 @@ workspace of two packages:
 - [packages/migration](./packages/migration/) — parses via the package above,
   copies images, and loads the outline into Postgres.
 
-Config-driven — each book is a small JSON file
-under [books/](./books/) naming its source directory, metadata, and which
-outline-building strategy to use. See [../docs/migration.md](../docs/migration.md)
-for how it works and how to write a new book config.
+The input is a book's Markdown directory (e.g. pdf-to-md output:
+`<name>_page_NNNN.md`, `<name>_metadata.json`, `images/`). Chapters come
+from the book's own contents page when it has one; title, slug and
+structure are derived from the directory — see [../docs/migration.md](../docs/migration.md).
 
 ```sh
-npm install                                                  # installs both packages
-npm test                                                     # parser tests
-npm run dry-run -- --book books/jougabodo-rawokhanthi.json   # -> outline.json (+ code analysis), no DB needed
-npm run load -- --book books/jougabodo-rawokhanthi.json      # requires DATABASE_URL (see .env.example), packages/migration/schema.sql
-                                                             # and the backend's migrations (cd ../backend && npm run migrate)
+npm install                                                   # installs both packages
+npm test                                                      # parser tests
+npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown # -> outline.json (+ code analysis), no DB needed
+npm run load -- ~/.output/NodeJs/Beginning_Nodejs/markdown --category programming-languages
+                                                              # requires DATABASE_URL (see .env.example), packages/migration/schema.sql
+                                                              # and the backend's migrations (cd ../backend && npm run migrate)
 ```
 
-`dry-run` flags: `--no-analyze` (skip syntax analysis), `--all-diagnostics`
-(print info-level diagnostics too). `load` refuses to load a book whose parse
-reported errors unless given `--allow-errors`.
+Without a directory argument, `UPLOAD_BOOK_PATH` from `.env` is used.
+`dry-run` flags: `--out <file>`, `--title`, `--slug`, `--no-analyze` (skip
+syntax analysis), `--all-diagnostics` (print info-level diagnostics too).
+`load`/`reload` flags: `--title`, `--slug`, `--author`, `--category <slug>`,
+`--allow-errors` (load even if the parse reported errors), `--out <file>`.

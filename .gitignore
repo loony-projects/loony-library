@@ -9,10 +9,7 @@ backend/.env
 frontend/.env
 book-import/.env
 
-# Machine-local migration input/output - book configs point at absolute
-# source paths on this machine, and outline.json/images are generated,
-# not source (see docs/migration.md)
-book-import/books/
+# Generated parser output (see docs/migration.md)
 book-import/outline.json
 backend/data/
 

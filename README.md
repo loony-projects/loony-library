@@ -28,7 +28,7 @@ createdb loony_library
 psql "$DATABASE_URL" -f book-import/packages/migration/schema.sql
 cd book-import && npm install && cp .env.example .env
 (cd ../backend && npm install && cp .env.example .env && npm run migrate)   # later schema changes; the loader needs them
-npm run load -- --book books/<slug>.json
+npm run load -- ~/.output/<Topic>/<Book>/markdown   # the book's Markdown directory
 
 # 2. Backend (uses book-import's markdown parser, installed above)
 cd ../backend
@@ -43,7 +43,7 @@ Open `http://localhost:5173` — it lists every loaded book; picking one opens i
 
 ## Adding a book
 
-The platform is book-agnostic: each book is just a small JSON config under [book-import/books/](book-import/books/) (slug, title/author metadata, source directory, and an outline-building strategy) plus its markdown source tree. No code changes needed to add a new one — see [docs/migration.md](docs/migration.md) for how the config-driven migration works.
+The platform is book-agnostic: a book is just a directory of Markdown (e.g. pdf-to-md output). Point the loader at it — title, slug and structure are derived from the directory. No code changes needed to add a new one — see [docs/migration.md](docs/migration.md).
 
 ## Docs
 
