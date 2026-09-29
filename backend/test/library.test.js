@@ -169,6 +169,42 @@ test("API integration in isolated schema", async () => {
       (await call("GET", `/sections/${sid}`)).data.section.draft_markdown,
       undefined,
     );
+    // Saved markdown goes through the book-import parser: fence meta and the
+    // normalized language survive, and breaks/footnotes are stored as their
+    // own block types (migrations/004) instead of being dropped.
+    const rich = await call(
+      "POST",
+      `/books/${slug}/chapters`,
+      { title: "Rich" },
+      cookie,
+    );
+    const rid = rich.data.section.id;
+    await call(
+      "PUT",
+      `/sections/${rid}/draft`,
+      {
+        markdown:
+          '```js title="a.js"\nconst a = 1;\n```\n\n---\n\nNote[^1].\n\n[^1]: Footnote.',
+      },
+      cookie,
+    );
+    assert.equal(
+      (await call("POST", `/sections/${rid}/publish`, {}, cookie)).status,
+      200,
+    );
+    const richBlocks = (await call("GET", `/sections/${rid}`)).data.blocks;
+    assert.deepEqual(
+      richBlocks.map((b) => b.block_type),
+      ["code", "thematic_break", "paragraph", "footnote"],
+    );
+    assert.deepEqual(
+      [
+        richBlocks[0].content.lang,
+        richBlocks[0].content.meta,
+        richBlocks[0].content.language,
+      ],
+      ["js", 'title="a.js"', "javascript"],
+    );
     const rc = await signIn("reader@example.com", "Reader");
     assert.equal(
       (await call("POST", `/sections/${sid}/publish`, {}, rc)).status,
@@ -235,7 +271,11 @@ test("API integration in isolated schema", async () => {
           "/reorder",
           {
             kind: "chapters",
-            ids: [second.data.chapter.id, chapter.data.chapter.id],
+            ids: [
+              second.data.chapter.id,
+              chapter.data.chapter.id,
+              rich.data.chapter.id,
+            ],
           },
           cookie,
         )

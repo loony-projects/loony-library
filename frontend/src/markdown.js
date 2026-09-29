@@ -15,8 +15,18 @@ function blockToMarkdown(block) {
   }
 
   if (block_type === "code") {
-    const fence = "```";
-    return `${fence}${content.lang || ""}\n${content.code}\n${fence}`;
+    // A fence must be longer than any backtick run inside the code, or a
+    // "```" line in the sample would end the block early on re-parse. The
+    // info string is written back exactly (label + meta, e.g.
+    // `js title="a.js"`); indented code comes back as a fenced block, same
+    // content.
+    const longestRun = Math.max(
+      0,
+      ...(content.code.match(/`+/g) || []).map((run) => run.length),
+    );
+    const fence = "`".repeat(Math.max(3, longestRun + 1));
+    const info = [content.lang, content.meta].filter(Boolean).join(" ");
+    return `${fence}${info}\n${content.code}\n${fence}`;
   }
 
   if (block_type === "html") {

@@ -1,47 +1,203 @@
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
-import { toString as mdastToString } from "mdast-util-to-string";
+import { parseMarkdownTree, positionOf, sourceOf } from "./markdown.js";
+import { plainText, inlineText } from "./text.js";
+import { headingItem } from "./headings.js";
+import { parseFenceInfo, normalizeLanguage } from "./languages.js";
 
-const processor = unified().use(remarkParse).use(remarkGfm);
+// Stages 2 + 4 - AST traversal and ordered content extraction for one
+// markdown source. Produces a flat, source-ordered list of items, each
+// either a `heading` (for the outline builders to turn into structure) or a
+// content `block` shaped the way content_blocks.content is stored and
+// rendered (see frontend/src/components/Blocks.jsx).
+//
+// Invariant: every top-level mdast node yields exactly one item, except a
+// figure caption (folded into its image block) and whitespace-only HTML.
+// Node types with no dedicated block type become an `unknown` block that
+// carries its raw markdown - content is never dropped for not fitting a
+// known category.
+//
+// The mdast node behind each item stays reachable through astOf(item) for
+// in-process stages (term extraction) without being serialized into the
+// outline JSON or the database.
 
-// A heading's text is expected to look like one of:
-//   "6. The Adverbs"
-//   "3.3 Nouns"
-//   "10.1.2Inclusive Particle"        (source has a missing space)
-//   "Foreword"                        (front matter, no numbering)
-// Numbering drives tree depth; unnumbered headings become depth-1 sections.
-const NUMBERING_RE = /^(\d+(?:\.\d+)*)\.?\s*(.*)$/;
+const astNodes = new WeakMap();
 
-function parseHeadingText(raw) {
-  const cleaned = raw.replace(/\s+/g, " ").trim();
-  const match = cleaned.match(NUMBERING_RE);
-  if (match && match[2]) {
-    return { numbering: match[1], title: match[2].trim() };
-  }
-  return { numbering: null, title: cleaned };
+export function astOf(item) {
+  return astNodes.get(item) ?? null;
 }
 
-function rawSlice(source, node) {
-  return source.slice(node.position.start.offset, node.position.end.offset).trim();
-}
-
-function tableToRows(node, source) {
-  return node.children.map((row) =>
-    row.children.map((cell) => mdastToString(cell).trim() || rawSlice(source, cell))
-  );
+function withAst(item, node) {
+  astNodes.set(item, node);
+  return item;
 }
 
 function isImageOnlyParagraph(node) {
   return node.type === "paragraph" && node.children.length === 1 && node.children[0].type === "image";
 }
 
+// Documented caption convention: an image paragraph immediately followed by
+// a paragraph consisting solely of emphasis ("*Figure 3.1: ...*").
 function isCaptionParagraph(node) {
-  return (
-    node.type === "paragraph" &&
-    node.children.length === 1 &&
-    node.children[0].type === "emphasis"
+  return node?.type === "paragraph" && node.children.length === 1 && node.children[0].type === "emphasis";
+}
+
+const FENCE_RE = /^[ \t]*(`{3,}|~{3,})/;
+
+/**
+ * Content of a `code` block, fenced or indented. `lang` and `meta` are
+ * exactly what the fence said (remark splits the info string at the first
+ * space); `language` is the normalized id, or null when the label is
+ * missing or unrecognized.
+ */
+export function codeContent(node, { source, file, diagnostics }) {
+  const raw = sourceOf(source, node);
+  const opening = raw.match(FENCE_RE);
+  const fenced = Boolean(opening);
+  const info = parseFenceInfo(node.lang, node.meta);
+  const language = normalizeLanguage(info.label);
+
+  if (opening) {
+    const lines = raw.split("\n");
+    const last = lines.length > 1 ? lines[lines.length - 1].replace(/^[ \t>]*/, "") : "";
+    const fenceChar = opening[1][0];
+    const closes = new RegExp(`^\\${fenceChar}{${opening[1].length},}[ \\t]*$`).test(last.trim());
+    if (!closes) {
+      diagnostics?.warning(
+        "code.unclosed_fence",
+        "Code fence is never closed; everything to the end of the file or container was read as code.",
+        { position: positionOf(node, file) }
+      );
+    }
+  }
+  if (info.label && !language) {
+    diagnostics?.info("code.unknown_language", `Unrecognized code language label "${info.label}".`, {
+      position: positionOf(node, file),
+    });
+  }
+
+  return {
+    code: node.value,
+    lang: node.lang ?? null,
+    meta: node.meta ?? null,
+    language,
+    fenced,
+    text: node.value,
+  };
+}
+
+// Code blocks nested inside a container block (list item, blockquote,
+// footnote). The container's markdown still renders them; these entries let
+// the code-block index reach them without re-parsing.
+function collectNestedCode(node, ctx, path = []) {
+  const found = [];
+  (node.children ?? []).forEach((child, index) => {
+    const childPath = [...path, `${child.type}[${index}]`];
+    if (child.type === "code") {
+      found.push({ content: codeContent(child, ctx), position: positionOf(child, ctx.file), path: childPath.join(">") });
+    } else if (child.children) {
+      found.push(...collectNestedCode(child, ctx, childPath));
+    }
+  });
+  return found;
+}
+
+function block(blockType, content, node, ctx, extra = {}) {
+  const item = { kind: "block", block_type: blockType, content, position: positionOf(node, ctx.file), ...extra };
+  return withAst(item, node);
+}
+
+function tableToRows(node, source) {
+  return node.children.map((row) =>
+    row.children.map((cell) => plainText(cell).trim() || sourceOf(source, cell).trim())
   );
+}
+
+function blockForNode(node, ctx) {
+  const { source } = ctx;
+  const markdown = () => sourceOf(source, node).trim();
+
+  switch (node.type) {
+    case "heading":
+      return withAst(headingItem(node, { position: positionOf(node, ctx.file), diagnostics: ctx.diagnostics }), node);
+
+    case "table": {
+      const rows = tableToRows(node, source);
+      return block("table", {
+        headers: rows[0] ?? [],
+        rows: rows.slice(1),
+        markdown: markdown(),
+        text: rows.map((r) => r.join(" ")).join("\n"),
+      }, node, ctx);
+    }
+
+    case "list": {
+      const nestedCode = collectNestedCode(node, ctx);
+      return block("list", {
+        ordered: !!node.ordered,
+        items: node.children.map((li) => plainText(li).trim()),
+        markdown: markdown(),
+        text: plainText(node).trim(),
+      }, node, ctx, nestedCode.length ? { nestedCode } : {});
+    }
+
+    case "blockquote": {
+      const nestedCode = collectNestedCode(node, ctx);
+      return block("blockquote", { markdown: markdown(), text: plainText(node).trim() }, node, ctx,
+        nestedCode.length ? { nestedCode } : {});
+    }
+
+    case "code":
+      return block("code", codeContent(node, ctx), node, ctx);
+
+    case "html":
+      // A standalone raw-HTML block (CommonMark HTML block, not inline
+      // markup inside a paragraph). Sanitized at render time, not here -
+      // see frontend/src/components/Blocks.jsx - since this is stored as-is
+      // and rendered to every future viewer. Blank lines inside the source
+      // split what looks like one wrapping tag into several sibling "html"
+      // nodes here (an opening <div>, its content, and the closing </div>)
+      // - mergeHtmlWrappers, below, re-merges a matching open/close pair
+      // (and everything between them) into one compound block.
+      if (!node.value.trim()) return null;
+      return block("html", { html: node.value, text: node.value }, node, ctx);
+
+    case "paragraph": {
+      const md = markdown();
+      if (!md) return null;
+      // Kept even when it has no plain text (e.g. only inline HTML).
+      return block("paragraph", { markdown: md, text: plainText(node).trim() }, node, ctx);
+    }
+
+    case "thematicBreak":
+      return block("thematic_break", { markdown: markdown(), text: "" }, node, ctx);
+
+    case "footnoteDefinition": {
+      const nestedCode = collectNestedCode(node, ctx);
+      return block("footnote", {
+        identifier: node.identifier,
+        label: node.label ?? node.identifier,
+        markdown: markdown(),
+        text: plainText(node).trim(),
+      }, node, ctx, nestedCode.length ? { nestedCode } : {});
+    }
+
+    case "definition":
+      // A link reference definition ("[label]: url"). Kept so the source
+      // round-trips through the editor and references stay resolvable.
+      return block("definition", {
+        identifier: node.identifier,
+        label: node.label ?? node.identifier,
+        url: node.url,
+        title: node.title ?? null,
+        markdown: markdown(),
+        text: "",
+      }, node, ctx);
+
+    default:
+      ctx.diagnostics?.info("block.unknown_node", `Markdown node "${node.type}" kept as an unknown block.`, {
+        position: positionOf(node, ctx.file),
+      });
+      return block("unknown", { nodeType: node.type, markdown: markdown(), text: plainText(node).trim() }, node, ctx);
+  }
 }
 
 const VOID_ELEMENTS = new Set([
@@ -95,25 +251,21 @@ function flattenChildrenText(children) {
  *
  * A markdown heading always closes every currently open wrapper first
  * rather than becoming a child of one - headings drive the book's section
- * tree upstream of this function (see buildOutlineByNumbering.js /
- * buildOutlineFlatChapters.js), and merging one into an arbitrary HTML
+ * tree downstream of this function, and merging one into an arbitrary HTML
  * wrapper would tangle that up for no real benefit, since the motivating
  * case (a `<div>` wrapping a raw `<h2>`) already works without it - a
  * self-contained "<h2>...</h2>" html node isn't a heading in this list at
  * all, just another block-kind item.
  */
 function mergeHtmlWrappers(items) {
-  const stack = []; // { tagName, openValue, children }[]
+  const stack = []; // { tagName, open, children }[]
   const top = () => (stack.length ? stack[stack.length - 1].children : null);
 
   function flushAll(into) {
     while (stack.length) {
       const frame = stack.pop();
       const target = stack.length ? stack[stack.length - 1].children : into;
-      target.push(
-        { kind: "block", block_type: "html", content: { html: frame.openValue, text: frame.openValue } },
-        ...frame.children
-      );
+      target.push(frame.open, ...frame.children);
     }
   }
 
@@ -128,7 +280,7 @@ function mergeHtmlWrappers(items) {
     if (item.block_type === "html") {
       const openTag = matchSoloOpenTag(item.content.html);
       if (openTag) {
-        stack.push({ tagName: openTag, openValue: item.content.html, children: [] });
+        stack.push({ tagName: openTag, open: item, children: [] });
         continue;
       }
       const closeTag = matchSoloCloseTag(item.content.html);
@@ -138,11 +290,14 @@ function mergeHtmlWrappers(items) {
           kind: "block",
           block_type: "html",
           content: {
-            openTag: frame.openValue,
+            openTag: frame.open.content.html,
             closeTag: item.content.html,
             children: frame.children,
             text: flattenChildrenText(frame.children),
           },
+          position: frame.open.position && item.position
+            ? { ...frame.open.position, end: item.position.end }
+            : frame.open.position,
         };
         (top() ?? result).push(wrapped);
         continue;
@@ -157,122 +312,48 @@ function mergeHtmlWrappers(items) {
 }
 
 /**
- * Parses one markdown file's source into a flat list of nodes tagged as
- * either `heading` (numbering/title, used to build the section tree) or a
- * content block (paragraph/list/image/table/blockquote/html, attached to
- * whichever section is currently open). A matching block-level HTML
- * open/close tag pair is merged into one compound block before this
- * returns - see mergeHtmlWrappers, above.
+ * Extracts items from a run of top-level mdast nodes (a whole file's
+ * children, or one page's slice of a single consolidated file).
+ * ctx: { source, file?, diagnostics? } - `source` is the full text the
+ * nodes' offsets point into.
  */
-export function parseFile(source) {
-  const tree = processor.parse(source);
-  const nodes = tree.children;
+export function extractItems(nodes, ctx) {
   const items = [];
-
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-
-    if (node.type === "heading") {
-      const { numbering, title } = parseHeadingText(mdastToString(node));
-      items.push({ kind: "heading", level: node.depth, numbering, title });
-      continue;
-    }
 
     if (isImageOnlyParagraph(node)) {
       const img = node.children[0];
       let caption = null;
-      const next = nodes[i + 1];
-      if (next && isCaptionParagraph(next)) {
-        caption = mdastToString(next).trim();
+      let end = node;
+      if (isCaptionParagraph(nodes[i + 1])) {
+        end = nodes[i + 1];
+        caption = inlineText(end);
         i++; // consume the caption line
       }
-      items.push({
-        kind: "block",
-        block_type: "image",
-        content: { src: img.url, alt: img.alt || null, caption, text: caption || img.alt || "" },
-      });
+      const item = block("image", {
+        src: img.url,
+        alt: img.alt || null,
+        caption,
+        text: caption || img.alt || "",
+      }, node, ctx);
+      if (end !== node && item.position) item.position.end = positionOf(end, ctx.file).end;
+      items.push(item);
       continue;
     }
 
-    if (node.type === "table") {
-      const rows = tableToRows(node, source);
-      items.push({
-        kind: "block",
-        block_type: "table",
-        content: {
-          headers: rows[0] ?? [],
-          rows: rows.slice(1),
-          markdown: rawSlice(source, node),
-          text: rows.flat().join(" "),
-        },
-      });
-      continue;
-    }
-
-    if (node.type === "list") {
-      items.push({
-        kind: "block",
-        block_type: "list",
-        content: {
-          ordered: !!node.ordered,
-          items: node.children.map((li) => mdastToString(li).trim()),
-          markdown: rawSlice(source, node),
-          text: mdastToString(node),
-        },
-      });
-      continue;
-    }
-
-    if (node.type === "blockquote") {
-      items.push({
-        kind: "block",
-        block_type: "blockquote",
-        content: { markdown: rawSlice(source, node), text: mdastToString(node) },
-      });
-      continue;
-    }
-
-    if (node.type === "code") {
-      items.push({
-        kind: "block",
-        block_type: "code",
-        content: { code: node.value, lang: node.lang || null, text: node.value },
-      });
-      continue;
-    }
-
-    if (node.type === "html") {
-      // A standalone raw-HTML block (CommonMark HTML block, not inline
-      // markup inside a paragraph). Sanitized at render time, not here -
-      // see frontend/src/components/Blocks.jsx - since this is stored as-is
-      // and rendered to every future viewer. Blank lines inside the source
-      // split what looks like one wrapping tag into several sibling "html"
-      // nodes here (an opening <div>, its content, and the closing </div>)
-      // - mergeHtmlWrappers, above, re-merges a matching open/close pair
-      // (and everything between them) into one compound block before this
-      // function returns.
-      if (!node.value.trim()) continue;
-      items.push({
-        kind: "block",
-        block_type: "html",
-        content: { html: node.value, text: node.value },
-      });
-      continue;
-    }
-
-    if (node.type === "paragraph") {
-      const text = mdastToString(node).trim();
-      if (!text) continue; // stray empty paragraph
-      items.push({
-        kind: "block",
-        block_type: "paragraph",
-        content: { markdown: rawSlice(source, node), text },
-      });
-      continue;
-    }
-
-    // thematicBreak, etc. - not meaningful content, skip.
+    const item = blockForNode(node, ctx);
+    if (item) items.push(item);
   }
-
   return mergeHtmlWrappers(items);
+}
+
+/**
+ * Parses one markdown file's source into a flat, source-ordered list of
+ * heading and content-block items (see extractItems). Also used by the
+ * backend to turn an edited section's markdown back into content_blocks.
+ */
+export function parseFile(source, { file = null, diagnostics = null } = {}) {
+  const tree = parseMarkdownTree(source);
+  return extractItems(tree.children, { source, file, diagnostics });
 }

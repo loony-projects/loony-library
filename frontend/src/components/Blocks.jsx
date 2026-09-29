@@ -57,8 +57,15 @@ function BlockquoteBlock({ content }) {
   );
 }
 
+// `language` is the parser's normalized id ("rust" for a ```rs or
+// ```rust,editable fence - see book-import/packages/markdown-parser/src/
+// languages.js); `lang` is the label exactly as written, the only field on
+// blocks imported before normalization existed.
 function CodeBlock({ content }) {
-  const { html, language } = highlightCode(content.code, content.lang);
+  const { html, language } = highlightCode(
+    content.code,
+    content.language || content.lang,
+  );
   return (
     <pre className="block-code">
       <code
@@ -155,6 +162,35 @@ function SubheadingBlock({ content }) {
   return <h4 className="block-subheading">{content.text}</h4>;
 }
 
+function ThematicBreakBlock() {
+  return <hr className="block-thematic-break" />;
+}
+
+// A GFM footnote definition ("[^1]: ...") - rendered where it appears in the
+// source, labelled so the in-text "[^1]" reference can be matched up by eye.
+function FootnoteBlock({ content }) {
+  const body = content.markdown.replace(/^\[\^[^\]]+\]:\s*/, "");
+  return (
+    <div className="block-footnote">
+      <sup>{content.label}</sup>
+      <div dangerouslySetInnerHTML={{ __html: renderBlock(body) }} />
+    </div>
+  );
+}
+
+// A link reference definition ("[label]: url") is link-target metadata, not
+// visible text - kept in the data (and in the editor's markdown) but not
+// rendered.
+function DefinitionBlock() {
+  return null;
+}
+
+// A markdown node the parser has no dedicated block type for, kept with its
+// raw source rather than dropped - shown as that source text, escaped.
+function UnknownBlock({ content }) {
+  return <pre className="block-unknown">{content.markdown}</pre>;
+}
+
 const RENDERERS = {
   paragraph: Paragraph,
   list: ListBlock,
@@ -164,6 +200,10 @@ const RENDERERS = {
   subheading: SubheadingBlock,
   code: CodeBlock,
   html: HtmlBlock,
+  thematic_break: ThematicBreakBlock,
+  footnote: FootnoteBlock,
+  definition: DefinitionBlock,
+  unknown: UnknownBlock,
 };
 
 export default function Block({ block }) {

@@ -27,10 +27,11 @@ See [docs/dev_setup.md](docs/dev_setup.md) for the full walkthrough. In short:
 createdb loony_library
 psql "$DATABASE_URL" -f book-import/packages/migration/schema.sql
 cd book-import && npm install && cp .env.example .env
+(cd ../backend && npm install && cp .env.example .env && npm run migrate)   # later schema changes; the loader needs them
 npm run load -- --book books/<slug>.json
 
-# 2. Backend
-cd ../backend && npm install && cp .env.example .env
+# 2. Backend (uses book-import's markdown parser, installed above)
+cd ../backend
 npm start                # http://localhost:4000
 
 # 3. Frontend

@@ -8,11 +8,16 @@ Already loaded per [migration.md](./migration.md): schema applied, content loade
 
 ## 2. Backend
 
+The backend parses edited sections with book-import's markdown parser
+(`@loony-library/markdown-parser`, linked from `../book-import`), so install
+that workspace first:
+
 ```sh
+(cd book-import && npm install)
 cd backend
 npm install
 cp .env.example .env   # set DATABASE_URL, plus CLIENT_ID / TENANT_ID / SECRET_KEY from loony-auth
-npm run migrate
+npm run migrate          # includes 004: parser block types + chapter/section roles
 npm start                # http://localhost:4000
 ```
 

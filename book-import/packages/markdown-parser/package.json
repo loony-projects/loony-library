@@ -2,20 +2,35 @@
   "name": "@loony-library/markdown-parser",
   "version": "0.1.0",
   "private": true,
-  "description": "Parses a book's markdown source, driven by a books/<slug>.json config, into a { book, chapters, glossary, symbols } outline.",
+  "description": "Parses a book's Markdown source (driven by a books/<slug>.json config, or a Markdown string) into an outline: chapters/sections with ordered content blocks, glossary, symbols, a code-block index with optional tree-sitter syntax analysis, and diagnostics.",
   "type": "module",
   "main": "src/index.js",
+  "types": "src/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
   },
   "bin": {
     "loony-parse-book": "src/cli.js"
   },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "mdast-util-to-string": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "remark-parse": "^11.0.0",
-    "unified": "^11.0.5"
+    "tree-sitter-c": "^0.24.1",
+    "tree-sitter-cpp": "^0.23.4",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-java": "^0.23.5",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "unified": "^11.0.5",
+    "web-tree-sitter": "^0.25.10"
   }
 }

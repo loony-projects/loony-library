@@ -371,6 +371,22 @@
   .reading .block-html {
     margin: 1.2em 0;
   }
+  .reading .block-thematic-break {
+    margin: 2em auto;
+    width: 30%;
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+  .reading .block-footnote {
+    display: flex;
+    gap: 0.5em;
+    margin: 0.8em 0;
+    font-size: 0.85em;
+    color: var(--muted-foreground);
+  }
+  .reading .block-footnote > div > :first-child {
+    margin-top: 0;
+  }
   .reading mark,
   mark {
     background: var(--mark);

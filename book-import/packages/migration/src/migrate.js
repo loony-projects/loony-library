@@ -3,15 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
 import pg from "pg";
-import { loadBookConfig, parseBook, summarize } from "@loony-library/markdown-parser";
+import { loadBookConfig, parseBook, summarize, printDiagnostics, countBySeverity } from "@loony-library/markdown-parser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
 function parseArgs(argv) {
-  const args = { reset: false, out: null, book: null };
+  const args = { reset: false, out: null, book: null, allowErrors: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--reset") args.reset = true;
+    else if (argv[i] === "--allow-errors") args.allowErrors = true;
     else if (argv[i] === "--out") args.out = argv[++i];
     else if (argv[i] === "--book") args.book = argv[++i];
   }
@@ -106,17 +107,17 @@ async function loadIntoPostgres(data) {
       const {
         rows: [{ id: chapterId }],
       } = await client.query(
-        `insert into chapters (book_id, number, slug, title, sort_order)
-         values ($1,$2,$3,$4,$5) returning id`,
-        [bookId, chapter.number, chapter.slug, chapter.title, chapter.sort_order]
+        `insert into chapters (book_id, number, slug, title, sort_order, role)
+         values ($1,$2,$3,$4,$5,$6) returning id`,
+        [bookId, chapter.number, chapter.slug, chapter.title, chapter.sort_order, chapter.role]
       );
 
       const insertSection = async (section, parentId) => {
         const {
           rows: [{ id: sectionId }],
         } = await client.query(
-          `insert into sections (chapter_id, parent_id, numbering, title, depth, sort_order, source_file)
-           values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+          `insert into sections (chapter_id, parent_id, numbering, title, depth, sort_order, source_file, role)
+           values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
           [
             chapterId,
             parentId,
@@ -125,6 +126,7 @@ async function loadIntoPostgres(data) {
             section.depth,
             section.sort_order,
             section.source_file,
+            section.role,
           ]
         );
 
@@ -197,6 +199,13 @@ async function main() {
   const config = loadBookConfig(args.book);
   const data = parseBook(config);
   console.log(summarize(data));
+  printDiagnostics(data.diagnostics);
+  // Warnings and info are authoring issues the outline already works
+  // around; an error means the parse is known to be incomplete (e.g. a
+  // configured glossary file is missing), so don't load it unless asked.
+  if (countBySeverity(data.diagnostics).error && !args.allowErrors) {
+    throw new Error("Parse reported errors (listed above); fix them or pass --allow-errors to load anyway.");
+  }
 
   if (args.out) {
     fs.writeFileSync(args.out, JSON.stringify(data, null, 2));

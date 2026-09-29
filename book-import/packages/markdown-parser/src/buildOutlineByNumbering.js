@@ -11,14 +11,19 @@ const SKIP_DIRS = new Set(["images", "node_modules", ".git", "docs", "migration"
 // Curated by hand rather than inferred: one flat section per listed file, in
 // this order, no nesting. Files not listed here (a blank page-break
 // artifact, a dropped dedication page) are excluded from the outline.
+// Each entry's role is part of the same hand curation.
 const FRONT_MATTER_FILES = [
-  { file: "0001_CoverPage.md", title: "Cover Page" },
-  { file: "0002_Publication.md", title: "Publication" },
-  { file: "0005_BookMetadata.md", title: "Book Metadata" },
-  { file: "0006_Foreword.md", title: "Foreword" },
-  { file: "0008_Preface.md", title: "Preface" },
-  { file: "0010_Acknowledgement.md", title: "Acknowledgement" },
+  { file: "0001_CoverPage.md", title: "Cover Page", role: "cover" },
+  { file: "0002_Publication.md", title: "Publication", role: "copyright" },
+  { file: "0005_BookMetadata.md", title: "Book Metadata", role: "front_matter" },
+  { file: "0006_Foreword.md", title: "Foreword", role: "foreword" },
+  { file: "0008_Preface.md", title: "Preface", role: "preface" },
+  { file: "0010_Acknowledgement.md", title: "Acknowledgement", role: "acknowledgments" },
 ];
+
+function normalizeTitle(text) {
+  return text.trim().toLowerCase().replace(/\.+$/, "");
+}
 
 function titleFromSlug(slug) {
   return slug.replace(/_/g, " ").trim();
@@ -87,7 +92,7 @@ function depthOf(numbering) {
  * flattened into a `subheading` content block on the nearest numbered
  * ancestor section: same reading-order position, not a nav item.
  */
-function attachToSections(parsedFiles) {
+function attachToSections(parsedFiles, diagnostics) {
   const roots = [];
   const stack = []; // stack[depth] = currently open numbered section at that depth
   let current = null; // most recently opened section of any kind - where content blocks attach
@@ -145,10 +150,16 @@ function attachToSections(parsedFiles) {
           kind: "block",
           block_type: "subheading",
           content: { text: item.title },
+          position: item.position,
         });
         continue;
       }
       if (!current) {
+        diagnostics.info(
+          "structure.content_before_first_heading",
+          "Content before the chapter's first heading kept in an \"Untitled\" section.",
+          { position: item.position, file: sourceFile }
+        );
         openSection(null, "Untitled", sourceFile);
       }
       current.blocks.push(item);
@@ -158,36 +169,55 @@ function attachToSections(parsedFiles) {
   return roots;
 }
 
-function buildFrontMatterSections(rootDir) {
-  return FRONT_MATTER_FILES.map(({ file, title }, i) => {
-    const items = parseFile(fs.readFileSync(path.join(rootDir, file), "utf8"));
+function buildFrontMatterSections(rootDir, diagnostics) {
+  const listed = new Set(FRONT_MATTER_FILES.map((f) => f.file));
+  for (const file of listMarkdownFiles(rootDir)) {
+    if (!listed.has(file)) {
+      diagnostics.warning("source.file_not_in_outline", `Front-matter file ${file} is not in FRONT_MATTER_FILES; not in the outline.`, { file });
+    }
+  }
+  return FRONT_MATTER_FILES.filter(({ file }) => {
+    if (fs.existsSync(path.join(rootDir, file))) return true;
+    diagnostics.warning("source.missing_file", `Front-matter file ${file} does not exist; section skipped.`, { file });
+    return false;
+  }).map(({ file, title, role }, i) => {
+    const items = parseFile(fs.readFileSync(path.join(rootDir, file), "utf8"), { file, diagnostics });
     return {
+      role,
       numbering: null,
       title,
       depth: 1,
       sort_order: i,
       source_file: file,
-      // Drop heading items - the section already carries its title above,
-      // and nesting is intentionally flat here (see FRONT_MATTER_FILES).
-      blocks: items.filter((item) => item.kind === "block"),
+      // Nesting is intentionally flat here (see FRONT_MATTER_FILES): a
+      // heading that repeats the section's own title is dropped, any other
+      // heading is kept in place as a subheading.
+      blocks: items.flatMap((item) => {
+        if (item.kind === "block") return [item];
+        const text = item.numbering ? `${item.numbering}. ${item.title}` : item.title;
+        if (normalizeTitle(text) === normalizeTitle(title)) return [];
+        return [{ kind: "block", block_type: "subheading", content: { text }, position: item.position }];
+      }),
       children: [],
     };
   });
 }
 
-export function buildOutlineByNumbering(rootDir) {
+export function buildOutlineByNumbering(rootDir, { diagnostics }) {
   return listChapters(rootDir).map((chapter, chapterIndex) => {
     const sections =
       chapter.slug === "front-matter"
-        ? buildFrontMatterSections(rootDir)
+        ? buildFrontMatterSections(rootDir, diagnostics)
         : attachToSections(
-            chapter.files.map((filePath) => ({
-              sourceFile: path.relative(rootDir, filePath),
-              items: parseFile(fs.readFileSync(filePath, "utf8")),
-            }))
+            chapter.files.map((filePath) => {
+              const sourceFile = path.relative(rootDir, filePath);
+              return { sourceFile, items: parseFile(fs.readFileSync(filePath, "utf8"), { file: sourceFile, diagnostics }) };
+            }),
+            diagnostics
           );
 
     return {
+      role: chapter.slug === "front-matter" ? "front_matter" : "chapter",
       number: chapter.number,
       slug: chapter.slug,
       title: chapter.title,

@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parseFile } from "./parseFile.js";
+import { parseFile, extractItems } from "./parseFile.js";
+import { parseMarkdownTree } from "./markdown.js";
+import { inlineText } from "./text.js";
+import { normalizeRole } from "./roles.js";
 
 const PAGE_FILE_RE = /_page_(\d+)\.md$/;
 
@@ -21,29 +24,73 @@ function listPages(rootDir) {
 // A single consolidated markdown file marks each original PDF page with its
 // own "## <label> - PDF page N" heading (e.g. "## Glossary entries - PDF
 // page 42") rather than being split into one file per page. Splitting on
-// that marker recovers the same { page, content } shape listPages()+
-// fs.readFileSync() would have produced, so the rest of this strategy
-// (front matter pages, explicit chapter startPage, everything) doesn't need
-// to know which source shape it's dealing with.
-const SINGLE_FILE_PAGE_MARKER_RE = /^##\s+.+-\s*PDF page\s+(\d+)\s*$/;
+// that marker recovers the same per-page shape listPages() produces, so the
+// rest of this strategy (front matter pages, explicit chapter startPage,
+// everything) doesn't need to know which source shape it's dealing with.
+//
+// The marker is matched on top-level heading nodes of the parsed file, not
+// on raw lines, so a "## ... - PDF page N" line inside a code block is
+// never mistaken for a page break; each page keeps its slice of the one
+// parsed tree (no re-parse per page), with positions pointing into the
+// real file.
+const SINGLE_FILE_PAGE_MARKER_RE = /^.+-\s*PDF page\s+(\d+)$/;
 
-function splitSingleFile(sourceFile) {
-  const lines = fs.readFileSync(sourceFile, "utf8").split("\n");
+function splitSingleFile(sourceFile, diagnostics) {
+  const source = fs.readFileSync(sourceFile, "utf8");
+  const file = path.basename(sourceFile);
   const pages = [];
   let current = null;
-  for (const line of lines) {
-    const match = line.trim().match(SINGLE_FILE_PAGE_MARKER_RE);
+  const orphans = [];
+  for (const node of parseMarkdownTree(source).children) {
+    const match = node.type === "heading" && node.depth === 2 && inlineText(node).match(SINGLE_FILE_PAGE_MARKER_RE);
     if (match) {
-      if (current) pages.push(current);
-      current = { page: Number(match[1]), lines: [] };
+      current = { file: `page-${match[1]}`, page: Number(match[1]), nodes: [] };
+      pages.push(current);
       continue;
     }
-    current?.lines.push(line);
+    (current ? current.nodes : orphans).push(node);
   }
-  if (current) pages.push(current);
+  if (orphans.length) {
+    diagnostics.warning(
+      "source.content_outside_outline",
+      `${orphans.length} block(s) before the first "PDF page" marker belong to no page and are not in the outline.`,
+      { file, line: orphans[0].position?.start.line }
+    );
+  }
   return pages
-    .map(({ page, lines }) => ({ file: `page-${page}`, page, content: lines.join("\n") }))
+    .map((p) => ({ ...p, items: extractItems(p.nodes, { source, file, diagnostics }) }))
     .sort((a, b) => a.page - b.page);
+}
+
+// A front-matter page is one flat section titled by the config. A heading
+// that just repeats that title is the page's own title and is dropped; any
+// other heading is kept in place as a subheading rather than lost.
+function frontMatterBlocks(items, title) {
+  const blocks = [];
+  for (const item of items) {
+    if (item.kind === "block") blocks.push(item);
+    else if (normalizeHeadingText(headingDisplay(item)) !== normalizeHeadingText(title)) {
+      blocks.push({ kind: "block", block_type: "subheading", content: { text: headingDisplay(item) }, position: item.position });
+    }
+  }
+  return blocks;
+}
+
+function headingDisplay(item) {
+  return item.numbering ? `${item.numbering}. ${item.title}` : item.title;
+}
+
+// Whether the first heading on a chapter's start page is that chapter's own
+// title marker ("Chapter 3", "Chapter 3. Title", "3 Title", or the title
+// itself) - consumed as the chapter marker - or real content that happens to
+// open the page, which is kept.
+function isChapterMarker(item, entry) {
+  const text = normalizeHeadingText(headingDisplay(item));
+  const title = normalizeHeadingText(entry.title);
+  if (!text) return true;
+  if (text === title || text.includes(title)) return true;
+  if (/^chapter\s+\S+/.test(text)) return true;
+  return entry.number != null && text.startsWith(String(entry.number).toLowerCase());
 }
 
 // Every heading inside a chapter becomes one in-place `subheading` content
@@ -53,6 +100,7 @@ function splitSingleFile(sourceFile) {
 // title heading at all).
 function createFlatSink(chapterTitle) {
   const section = {
+    role: "body",
     numbering: null,
     title: chapterTitle,
     depth: 1,
@@ -69,8 +117,7 @@ function createFlatSink(chapterTitle) {
       // that field for structure, so fold it back into the display text
       // rather than silently dropping enumeration like "3." from a
       // numbered subheading such as "3. बिसुबुं बिसुं (Determinative Compound)".
-      const text = item.numbering ? `${item.numbering}. ${item.title}` : item.title;
-      section.blocks.push({ kind: "block", block_type: "subheading", content: { text } });
+      section.blocks.push({ kind: "block", block_type: "subheading", content: { text: headingDisplay(item) }, position: item.position });
     },
     pushBlock(item) {
       section.blocks.push(item);
@@ -93,6 +140,7 @@ function createFlatSink(chapterTitle) {
 // whatever content precedes the chapter's first numbered heading.
 function createNumberedSink(chapterTitle) {
   const introSection = {
+    role: "body",
     numbering: null,
     title: chapterTitle,
     depth: 1,
@@ -137,7 +185,7 @@ function createNumberedSink(chapterTitle) {
       // Unnumbered heading (a "Listing N.N" label, an EXERCISE lead-in, ...)
       // - flatten onto whichever section is currently open, same as the
       // other two strategies do for their own unnumbered headings.
-      current.blocks.push({ kind: "block", block_type: "subheading", content: { text: item.title } });
+      current.blocks.push({ kind: "block", block_type: "subheading", content: { text: item.title }, position: item.position });
     },
     pushBlock(item) {
       current.blocks.push(item);
@@ -167,9 +215,9 @@ function createNumberedSink(chapterTitle) {
  * files (rootDir), or a single consolidated file with "## ... - PDF page N"
  * markers (config.sourceFile) - see splitSingleFile, above.
  */
-export function buildOutlineFlatChapters(rootDir, config) {
-  const pages = config.sourceFile ? splitSingleFile(config.sourceFile) : listPages(rootDir);
-  const frontMatterPages = new Map((config.frontMatter ?? []).map((f) => [f.page, f.title]));
+export function buildOutlineFlatChapters(rootDir, config, { diagnostics }) {
+  const pages = config.sourceFile ? splitSingleFile(config.sourceFile, diagnostics) : listPages(rootDir);
+  const frontMatterPages = new Map((config.frontMatter ?? []).map((f) => [f.page, f]));
   const chapters = [...config.chapters].sort((a, b) => a.startPage - b.startPage);
 
   function chapterForPage(pageNum) {
@@ -182,6 +230,7 @@ export function buildOutlineFlatChapters(rootDir, config) {
   }
 
   const frontMatterChapter = {
+    role: "front_matter",
     number: null,
     slug: "front-matter",
     title: "Front Matter",
@@ -196,6 +245,7 @@ export function buildOutlineFlatChapters(rootDir, config) {
   for (const [i, c] of chapters.entries()) {
     const sink = createSink(c.title);
     const chapter = {
+      role: normalizeRole(c.role) ?? "chapter",
       number: c.number,
       slug: c.slug ?? String(i + 1),
       title: c.title,
@@ -210,18 +260,20 @@ export function buildOutlineFlatChapters(rootDir, config) {
   let activeSink = null; // the sink of whichever chapter is currently open
   let chapterStartPage = null; // startPage of the currently open chapter, to know when we've just entered it
 
-  for (const { file, page, content } of pages) {
-    const items = parseFile(content ?? fs.readFileSync(path.join(rootDir, file), "utf8"));
+  for (const { file, page, items: splitItems } of pages) {
+    const items =
+      splitItems ?? parseFile(fs.readFileSync(path.join(rootDir, file), "utf8"), { file, diagnostics });
 
     if (frontMatterPages.has(page)) {
-      const title = frontMatterPages.get(page);
+      const { title, role } = frontMatterPages.get(page);
       const section = {
+        role: normalizeRole(role) ?? "section",
         numbering: null,
         title,
         depth: 1,
         sort_order: frontMatterSortOrder++,
         source_file: file,
-        blocks: items.filter((item) => item.kind === "block"),
+        blocks: frontMatterBlocks(items, title),
         children: [],
       };
       frontMatterChapter.sections.push(section);
@@ -229,7 +281,19 @@ export function buildOutlineFlatChapters(rootDir, config) {
     }
 
     const entry = chapterForPage(page);
-    if (!entry) continue; // pages before the first chapter and not listed as front matter are dropped
+    if (!entry) {
+      // Pages before the first chapter that the config doesn't list as
+      // front matter are outside the outline by the config's choice -
+      // reported, since their content is not loaded.
+      if (items.length) {
+        diagnostics.warning(
+          "source.page_not_in_outline",
+          `Page ${page} is before the first configured chapter and not listed in frontMatter; its ${items.length} item(s) are not in the outline.`,
+          { file, position: items[0].position }
+        );
+      }
+      continue;
+    }
 
     if (entry.startPage !== chapterStartPage) {
       chapterStartPage = entry.startPage;
@@ -241,7 +305,14 @@ export function buildOutlineFlatChapters(rootDir, config) {
       // consumed as the chapter marker rather than duplicated as content -
       // unless the page has no heading at all (the one chapter whose title
       // page was lost to a skipped OCR page starts directly with body text).
-      if (page === entry.startPage && i === 0 && item.kind === "heading") continue;
+      if (page === entry.startPage && i === 0 && item.kind === "heading") {
+        if (isChapterMarker(item, entry)) continue;
+        diagnostics.info(
+          "structure.chapter_marker_kept",
+          `First heading "${headingDisplay(item)}" on chapter "${entry.title}"'s start page doesn't look like its title; kept as a subheading.`,
+          { position: item.position }
+        );
+      }
 
       // Some sources split the marker and the human-readable title into two
       // consecutive headings ("Chapter 3" then "Welcome to Day 1") rather

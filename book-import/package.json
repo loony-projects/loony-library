@@ -11,6 +11,7 @@
   "scripts": {
     "dry-run": "node packages/markdown-parser/src/cli.js --out outline.json",
     "load": "node packages/migration/src/migrate.js",
-    "reload": "node packages/migration/src/migrate.js --reset"
+    "reload": "node packages/migration/src/migrate.js --reset",
+    "test": "npm test --workspaces --if-present"
   }
 }
