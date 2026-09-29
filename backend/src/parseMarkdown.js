@@ -5,7 +5,7 @@ import { toString as mdastToString } from "mdast-util-to-string";
 
 const processor = unified().use(remarkParse).use(remarkGfm);
 
-// Same numbering convention as migration/src/parseFile.js - kept in sync by
+// Same numbering convention as book-import/packages/markdown-parser/src/parseFile.js - kept in sync by
 // hand since this is a separate npm project (see docs/dev_setup.md).
 const NUMBERING_RE = /^(\d+(?:\.\d+)*)\.?\s*(.*)$/;
 

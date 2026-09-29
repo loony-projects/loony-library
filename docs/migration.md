@@ -1,14 +1,19 @@
 # Migration script
 
-Code lives in [migration/](../migration/) — a standalone Node tool (its own `package.json`) that parses a book's markdown source into the schema from [app_idea.md](./app_idea.md) / [er_diagram.md](./er_diagram.md). It's config-driven: each book gets a small JSON file under [migration/books/](../migration/books/) (slug, title/author/..., `sourceDir`, and which of the two outline-building strategies below to use), so adding a new book doesn't mean editing the tool itself.
+Code lives in [book-import/](../book-import/) — an npm workspace of two packages that together turn a book's markdown source into the schema from [app_idea.md](./app_idea.md) / [er_diagram.md](./er_diagram.md):
+
+- **[packages/markdown-parser](../book-import/packages/markdown-parser/)** (`@loony-library/markdown-parser`) — markdown source → `{ book, chapters, glossary, symbols }` outline. No database dependency; exports `loadBookConfig`, `parseBook`, `summarize` from `src/index.js`, plus a CLI (`src/cli.js`) that writes the outline to JSON.
+- **[packages/migration](../book-import/packages/migration/)** (`@loony-library/migration`) — imports the parser, then copies images and loads the outline into Postgres. Owns [schema.sql](../book-import/packages/migration/schema.sql).
+
+It's config-driven: each book gets a small JSON file under [book-import/books/](../book-import/books/) (slug, title/author/..., `sourceDir`, and which of the two outline-building strategies below to use), so adding a new book doesn't mean editing the tool itself.
 
 ## How it works
 
-1. **[migration/src/parseFile.js](../migration/src/parseFile.js)** — parses a single markdown file with `remark` (GFM enabled for tables) into a flat list of items: headings (level, numbering if any, title) and content blocks (paragraph, list, image, table, blockquote). An image paragraph immediately followed by an italic-only paragraph is merged into one `image` block with the italic text as its caption (matches the `![](...)` + `*Figure 3.1: ...*` pattern used throughout the source). Shared by both strategies below, unchanged by either.
+1. **[markdown-parser/src/parseFile.js](../book-import/packages/markdown-parser/src/parseFile.js)** — parses a single markdown file with `remark` (GFM enabled for tables) into a flat list of items: headings (level, numbering if any, title) and content blocks (paragraph, list, image, table, blockquote). An image paragraph immediately followed by an italic-only paragraph is merged into one `image` block with the italic text as its caption (matches the `![](...)` + `*Figure 3.1: ...*` pattern used throughout the source). Shared by both strategies below, unchanged by either.
 
 2. Two outline-building strategies turn a book's parsed pages into a chapter/section tree, selected per-book by the `strategy` field in its config:
 
-### `numbering` — **[migration/src/buildOutlineByNumbering.js](../migration/src/buildOutlineByNumbering.js)**
+### `numbering` — **[markdown-parser/src/buildOutlineByNumbering.js](../book-import/packages/markdown-parser/src/buildOutlineByNumbering.js)**
 
 For books curated into `NNN_Name/` chapter directories with dotted numbering in their headings (currently: *Modern Bodo Grammar*). Each directory becomes a chapter. Within a chapter, headings are threaded into a section tree keyed by their numbering's dot-count (`3.3.1` → depth 3), *not* by the markdown `#` level — the source is inconsistent about heading levels (a `####` sometimes outranks a `##`).
 
@@ -16,7 +21,7 @@ For books curated into `NNN_Name/` chapter directories with dotted numbering in 
 
    The loose files directly under `pages/` (`0001_CoverPage.md` etc.) don't go through this generic heading logic at all — several have no real heading of their own (`BookMetadata.md` has none; `CoverPage.md`'s only heading is the author's name). They're curated by hand instead: a fixed `FRONT_MATTER_FILES` list in `buildOutlineByNumbering.js` maps six of them to one flat section each (Cover Page, Publication, Book Metadata, Foreword, Preface, Acknowledgement), no nesting. A blank page-break file and a dedication page are excluded from the outline entirely, by choice, not by parsing failure.
 
-### `flat-chapters` — **[migration/src/buildOutlineFlatChapters.js](../migration/src/buildOutlineFlatChapters.js)**
+### `flat-chapters` — **[markdown-parser/src/buildOutlineFlatChapters.js](../book-import/packages/markdown-parser/src/buildOutlineFlatChapters.js)**
 
 For books that are a flat dump of per-page markdown (raw `pdf-to-md` output, no curated chapter directories) with no numbering scheme in their headings to derive depth from — currently *Jouga Boro Raokhanthi*. Two problems specific to this shape:
 
@@ -30,21 +35,21 @@ What happens *inside* each chapter is a separate, per-book choice — `config.ch
 - Default (omitted, or any value other than `"numbered"`): every heading inside a chapter, at any level, becomes an in-place `subheading` content block rather than a nav-tree node, so each chapter is **exactly one flat section**. Use this when a book's headings can't be trusted to carry real, complete numbering — *Jouga Boro Raokhanthi*'s case above.
 - `"numbered"`: subsection headings that *do* carry real numbering ("1.1", "1.1.2", ...) become real nested sections instead — same depth-from-numbering idea as the `numbering` strategy, just scoped to one chapter's page range instead of a whole curated folder. An intro section (titled after the chapter) holds whatever content precedes the chapter's first numbered heading. Used for *Comprehensive Rust*, whose ~1400 subsections are reliably numbered even though its 84 top-level chapters are only marked by a separate "Chapter N" heading rather than numbering.
 
-3. **[migration/src/extractTermList.js](../migration/src/extractTermList.js)** — the Abbreviations and Symbols pages are flat `TERM → expansion` lists rather than prose, so they're parsed separately into `glossary_terms` / `symbols` rows.
+3. **[markdown-parser/src/extractTermList.js](../book-import/packages/markdown-parser/src/extractTermList.js)** — the Abbreviations and Symbols pages are flat `TERM → expansion` lists rather than prose, so they're parsed separately into `glossary_terms` / `symbols` rows.
 
-4. **[migration/src/migrate.js](../migration/src/migrate.js)** — orchestrates the above and either:
-   - writes the parsed tree to a JSON file (`--out`, default `outline.json`) for inspection, no database required, or
-   - loads it into Postgres (`--load`), using `DATABASE_URL`, inside a single transaction.
+4. **[markdown-parser/src/index.js](../book-import/packages/markdown-parser/src/index.js)** — orchestrates the above (`loadBookConfig` → `parseBook`). Its CLI, [cli.js](../book-import/packages/markdown-parser/src/cli.js), writes the parsed tree to a JSON file (`--out`, default `outline.json`) for inspection, no database required.
+
+5. **[migration/src/migrate.js](../book-import/packages/migration/src/migrate.js)** — parses the book through the parser package, copies its images into `backend/data/images/<slug>/`, and loads it into Postgres using `DATABASE_URL`, inside a single transaction (`--reset` deletes the existing book by title first).
 
 ## Usage
 
 ```sh
-cd migration
-npm install
+cd book-import
+npm install            # installs both workspace packages
 npm run dry-run -- --book books/jougabodo-rawokhanthi.json   # writes outline.json, no DB needed
 
 createdb loony_library
-psql "$DATABASE_URL" -f schema.sql
+psql "$DATABASE_URL" -f packages/migration/schema.sql
 cp .env.example .env   # set DATABASE_URL
 npm run load -- --book books/jougabodo-rawokhanthi.json      # first load
 npm run reload -- --book books/jougabodo-rawokhanthi.json    # re-parse + wipe-and-reload (deletes by title, cascades)

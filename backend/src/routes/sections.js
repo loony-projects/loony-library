@@ -48,7 +48,7 @@ router.get("/sections/:id", async (req, res, next) => {
 
 // Replaces a section's content_blocks wholesale from markdown. Every heading
 // in the submitted text becomes a `subheading` block, same as unnumbered
-// headings during migration (see migration/src/buildOutlineByNumbering.js) -
+// headings during migration (see book-import/packages/markdown-parser/src/buildOutlineByNumbering.js) -
 // writing a section's text never restructures the book's section tree.
 // Shared by the create and update routes below; must run inside a
 // transaction the caller controls (it doesn't begin/commit itself).

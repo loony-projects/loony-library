@@ -23,7 +23,7 @@ test("API integration in isolated schema", async () => {
     pool.options.options = `-c search_path=${schema},public`;
     await pool.query(
       await fs.readFile(
-        new URL("../../migration/schema.sql", import.meta.url),
+        new URL("../../book-import/packages/migration/schema.sql", import.meta.url),
         "utf8",
       ),
     );

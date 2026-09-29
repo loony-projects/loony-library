@@ -93,7 +93,7 @@ The book's actual complexity is the arbitrarily deep numbering (some subsections
 ## Next steps
 
 - [x] ER diagram — see [er_diagram.md](./er_diagram.md)
-- [x] Migration script to parse existing markdown into this schema — see [migration.md](./migration.md) and [migration/](../migration/)
+- [x] Migration script to parse existing markdown into this schema — see [migration.md](./migration.md) and [book-import/](../book-import/)
 - [x] Express API scaffold — see [backend/](../backend/)
 - [x] React reader scaffold — see [frontend/](../frontend/)
 - [ ] Deployment / hosting

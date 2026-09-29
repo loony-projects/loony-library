@@ -13,7 +13,7 @@ React SPA  →  Node.js/Express API  →  PostgreSQL
 
 ## Project layout
 
-- [migration/](migration/) — config-driven tool that parses a book's markdown source into the Postgres schema (run once per book, or on reload)
+- [book-import/](book-import/) — npm workspace, run once per book (or on reload): [packages/markdown-parser](book-import/packages/markdown-parser/) parses a book's markdown source into an outline, [packages/migration](book-import/packages/migration/) loads it into the Postgres schema
 - [backend/](backend/) — Express API serving book content, TOC, search, glossary/symbols out of Postgres
 - [frontend/](frontend/) — React reader: library landing page, sidebar table of contents, section pages, search
 - [docs/](docs/) — design notes, ER diagram, and migration details
@@ -25,8 +25,8 @@ See [docs/dev_setup.md](docs/dev_setup.md) for the full walkthrough. In short:
 ```sh
 # 1. Database (once per book — see docs/migration.md)
 createdb loony_library
-psql "$DATABASE_URL" -f migration/schema.sql
-cd migration && npm install && cp .env.example .env
+psql "$DATABASE_URL" -f book-import/packages/migration/schema.sql
+cd book-import && npm install && cp .env.example .env
 npm run load -- --book books/<slug>.json
 
 # 2. Backend
@@ -42,7 +42,7 @@ Open `http://localhost:5173` — it lists every loaded book; picking one opens i
 
 ## Adding a book
 
-The platform is book-agnostic: each book is just a small JSON config under [migration/books/](migration/books/) (slug, title/author metadata, source directory, and an outline-building strategy) plus its markdown source tree. No code changes needed to add a new one — see [docs/migration.md](docs/migration.md) for how the config-driven migration works.
+The platform is book-agnostic: each book is just a small JSON config under [book-import/books/](book-import/books/) (slug, title/author metadata, source directory, and an outline-building strategy) plus its markdown source tree. No code changes needed to add a new one — see [docs/migration.md](docs/migration.md) for how the config-driven migration works.
 
 ## Docs
 

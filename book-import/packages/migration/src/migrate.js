@@ -3,95 +3,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
 import pg from "pg";
-import { buildOutlineByNumbering } from "./buildOutlineByNumbering.js";
-import { buildOutlineFlatChapters } from "./buildOutlineFlatChapters.js";
-import { extractTermList } from "./extractTermList.js";
+import { loadBookConfig, parseBook, summarize } from "@loony-library/markdown-parser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "backend", "data", "images");
+const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
 function parseArgs(argv) {
-  const args = { load: false, reset: false, out: null, book: null };
+  const args = { reset: false, out: null, book: null };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--load") args.load = true;
-    else if (argv[i] === "--reset") args.reset = true;
+    if (argv[i] === "--reset") args.reset = true;
     else if (argv[i] === "--out") args.out = argv[++i];
     else if (argv[i] === "--book") args.book = argv[++i];
   }
   if (!args.book) throw new Error("--book <path-to-config.json> is required");
-  if (!args.load && !args.out) args.out = "outline.json";
   return args;
-}
-
-function loadBookConfig(bookPath) {
-  const config = JSON.parse(fs.readFileSync(bookPath, "utf8"));
-  if (!config.slug) throw new Error(`${bookPath}: missing "slug"`);
-
-  // A book's source is either a single consolidated markdown file
-  // (sourceFile - see buildOutlineFlatChapters.js's splitSingleFile) or a
-  // directory of *_page_NNNN.md files (sourceDir). sourceDir is optional in
-  // the config itself when it's the latter - a new book's config can omit
-  // it entirely and just rely on UPLOAD_BOOK_PATH (see .env.example), so
-  // migrating a new book never means hand-editing an absolute path into its
-  // JSON. An explicit sourceDir in the config still wins, so existing book
-  // configs that already hardcode one keep working unchanged.
-  if (config.sourceFile) {
-    if (!fs.existsSync(config.sourceFile)) {
-      throw new Error(`${bookPath}: sourceFile does not exist: ${config.sourceFile}`);
-    }
-    return config;
-  }
-
-  const sourceDir = config.sourceDir || process.env.UPLOAD_BOOK_PATH;
-  if (!sourceDir) {
-    throw new Error(`${bookPath}: missing "sourceDir"/"sourceFile" (and UPLOAD_BOOK_PATH is not set in .env)`);
-  }
-  if (!fs.existsSync(sourceDir)) {
-    throw new Error(`${bookPath}: sourceDir does not exist: ${sourceDir}`);
-  }
-  return { ...config, sourceDir };
-}
-
-function buildChapters(config) {
-  if (config.strategy === "flat-chapters") {
-    return buildOutlineFlatChapters(config.sourceDir, config);
-  }
-  if (config.strategy === "numbering") {
-    return buildOutlineByNumbering(config.sourceDir);
-  }
-  throw new Error(`Unknown strategy "${config.strategy}"`);
-}
-
-function buildGlossaryAndSymbols(config) {
-  if (!config.glossaryFile) return { glossary: [], symbols: [] };
-  const glossary = extractTermList(fs.readFileSync(path.join(config.sourceDir, config.glossaryFile), "utf8"));
-  const symbols = config.symbolsFile
-    ? extractTermList(fs.readFileSync(path.join(config.sourceDir, config.symbolsFile), "utf8")).map((entry) => ({
-        symbol: entry.term,
-        description: entry.expansion,
-      }))
-    : [];
-  return { glossary, symbols };
-}
-
-function buildEverything(config) {
-  const chapters = buildChapters(config);
-  const { glossary, symbols } = buildGlossaryAndSymbols(config);
-  return { book: config, chapters, glossary, symbols };
-}
-
-function countBlocks(chapters) {
-  let sections = 0;
-  let blocks = 0;
-  const walk = (nodes) => {
-    for (const s of nodes) {
-      sections++;
-      blocks += s.blocks.length;
-      walk(s.children);
-    }
-  };
-  chapters.forEach((c) => walk(c.sections));
-  return { sections, blocks };
 }
 
 // This book's raw markdown references images inconsistently (missing
@@ -266,26 +191,20 @@ async function loadIntoPostgres(data) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not set (see .env.example)");
+  }
   const config = loadBookConfig(args.book);
-  const data = buildEverything(config);
-  const { sections, blocks } = countBlocks(data.chapters);
-  console.log(
-    `Parsed ${data.chapters.length} chapters, ${sections} sections, ${blocks} content blocks, ` +
-      `${data.glossary.length} glossary terms, ${data.symbols.length} symbols.`
-  );
+  const data = parseBook(config);
+  console.log(summarize(data));
 
   if (args.out) {
     fs.writeFileSync(args.out, JSON.stringify(data, null, 2));
     console.log(`Wrote ${args.out}`);
   }
 
-  if (args.load) {
-    if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL is not set (see .env.example)");
-    }
-    resolveAndCopyImages(data.chapters, config);
-    await loadIntoPostgres({ ...data, reset: args.reset });
-  }
+  resolveAndCopyImages(data.chapters, config);
+  await loadIntoPostgres({ ...data, reset: args.reset });
 }
 
 main().catch((err) => {

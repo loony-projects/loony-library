@@ -1,0 +1,21 @@
+{
+  "name": "@loony-library/markdown-parser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Parses a book's markdown source, driven by a books/<slug>.json config, into a { book, chapters, glossary, symbols } outline.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "bin": {
+    "loony-parse-book": "src/cli.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mdast-util-to-string": "^4.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
+  }
+}

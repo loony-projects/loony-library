@@ -4,7 +4,7 @@ import { highlightCode } from "../highlight";
 import { renderBlock, renderInline } from "../renderMarkdown";
 
 // Renders the block's own stored markdown (bold, italic, inline code,
-// links - see migration/src/parseFile.js and backend/src/parseMarkdown.js,
+// links - see book-import/packages/markdown-parser/src/parseFile.js and backend/src/parseMarkdown.js,
 // which keep the original source alongside the flattened `text` used for
 // search) instead of the flattened plain text, so what's on the page
 // matches what the editor's live preview already showed while writing it.

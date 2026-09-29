@@ -47,7 +47,7 @@ create table content_blocks (
     block_type  text not null check (block_type in
                     ('paragraph', 'list', 'image', 'table', 'blockquote', 'subheading', 'code', 'html')),
     sort_order  int not null,
-    content     jsonb not null,    -- shape depends on block_type, see migration/src/parseFile.js
+    content     jsonb not null,    -- shape depends on block_type, see book-import/packages/markdown-parser/src/parseFile.js
     tsv         tsvector generated always as (
                     to_tsvector('english', coalesce(content->>'text', ''))
                 ) stored

@@ -1,0 +1,12 @@
+{
+  "name": "@loony-library/migration",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loads a book parsed by @loony-library/markdown-parser into the books/chapters/sections/content_blocks Postgres schema (schema.sql).",
+  "type": "module",
+  "dependencies": {
+    "@loony-library/markdown-parser": "0.1.0",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0"
+  }
+}

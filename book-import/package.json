@@ -1,0 +1,16 @@
+{
+  "name": "loony-library-book-import",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workspace for turning a book's markdown source into the Postgres schema: packages/markdown-parser (markdown -> outline) and packages/migration (outline -> Postgres). Usage: npm run dry-run -- --book books/<slug>.json",
+  "type": "module",
+  "workspaces": [
+    "packages/markdown-parser",
+    "packages/migration"
+  ],
+  "scripts": {
+    "dry-run": "node packages/markdown-parser/src/cli.js --out outline.json",
+    "load": "node packages/migration/src/migrate.js",
+    "reload": "node packages/migration/src/migrate.js --reset"
+  }
+}
