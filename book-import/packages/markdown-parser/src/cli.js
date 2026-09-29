@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import "dotenv/config";
-import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics, renderBookMarkdown } from "./index.js";
+import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics, renderBookMarkdown, bookDirFromEnv, UsageError } from "./index.js";
 
-// Usage: cli.js <markdown-dir> [--out book-output.md] [--title T] [--slug S]
-//                              [--no-analyze] [--all-diagnostics]
-// <markdown-dir> defaults to UPLOAD_BOOK_PATH (see .env.example).
+// Usage: cli.js [--out book-output.md] [--title T] [--slug S] [--no-analyze] [--all-diagnostics]
+// The book's Markdown directory is UPLOAD_BOOK_PATH in .env (see .env.example).
 function parseArgs(argv) {
-  const args = { dir: null, out: "book-output.md", analyze: true, allDiagnostics: false, overrides: {} };
+  const args = { out: "book-output.md", analyze: true, allDiagnostics: false, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--out") args.out = argv[++i];
@@ -15,17 +14,15 @@ function parseArgs(argv) {
     else if (arg === "--slug") args.overrides.slug = argv[++i];
     else if (arg === "--no-analyze") args.analyze = false;
     else if (arg === "--all-diagnostics") args.allDiagnostics = true;
-    else if (arg.startsWith("--")) throw new Error(`Unknown option ${arg}`);
-    else args.dir = arg;
+    else if (arg.startsWith("--")) throw new UsageError(`Unknown option ${arg}`);
+    else throw new UsageError(`Unexpected argument "${arg}". Set the book's Markdown directory as UPLOAD_BOOK_PATH in .env instead.`);
   }
-  args.dir ??= process.env.UPLOAD_BOOK_PATH || null;
-  if (!args.dir) throw new Error("Pass the book's Markdown directory (or set UPLOAD_BOOK_PATH in .env)");
   return args;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const outline = parseBookDirectory(args.dir, args.overrides);
+  const outline = parseBookDirectory(bookDirFromEnv(), args.overrides);
   if (args.analyze) await analyzeCodeBlocks(outline);
   console.log(`${outline.book.title} (${outline.book.slug}) from ${outline.book.sourceDir} [${outline.book.strategy}]`);
   console.log(summarize(outline));
@@ -35,6 +32,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(err instanceof UsageError ? `Error: ${err.message}` : err);
   process.exit(1);
 });

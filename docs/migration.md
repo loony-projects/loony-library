@@ -5,7 +5,7 @@ Code lives in [book-import/](../book-import/) — an npm workspace of two packag
 - **[packages/markdown-parser](../book-import/packages/markdown-parser/)** (`@loony-library/markdown-parser`) — markdown source → outline `{ book, chapters, glossary, symbols, codeBlocks, diagnostics }`. No database dependency. Public API in [src/index.js](../book-import/packages/markdown-parser/src/index.js), typed in [src/index.d.ts](../book-import/packages/markdown-parser/src/index.d.ts); CLI in [src/cli.js](../book-import/packages/markdown-parser/src/cli.js). The backend's section editor uses the same package ([backend/src/parseMarkdown.js](../backend/src/parseMarkdown.js)), so an edited section is stored in exactly the block shapes an import produces.
 - **[packages/migration](../book-import/packages/migration/)** (`@loony-library/migration`) — imports the parser, then copies images and loads the outline into Postgres. Owns [schema.sql](../book-import/packages/migration/schema.sql); later schema changes are in [backend/migrations/](../backend/migrations/) (`004` adds the parser's newer block types and `role` columns).
 
-The input is a book's **Markdown directory** — typically pdf-to-md output (`<name>_page_NNNN.md` files, `<name>_metadata.json`, `images/`), e.g. `~/.output/NodeJs/Beginning_Nodejs/markdown`. There is no per-book config: the title comes from `<name>_metadata.json` (the PDF name) or the folder name, the slug from the title (both overridable with `--title` / `--slug`), and the structure strategy from the directory's shape.
+The input is a book's **Markdown directory** — typically pdf-to-md output (`<name>_page_NNNN.md` files, `<name>_metadata.json`, `images/`), e.g. `~/.output/NodeJs/Beginning_Nodejs/markdown`. The directory is `UPLOAD_BOOK_PATH` in `book-import/.env`. There is no per-book config: the title comes from `<name>_metadata.json` (the PDF name) or the folder name, the slug from the title (both overridable with `--title` / `--slug`), and the structure strategy from the directory's shape.
 
 ## Pipeline
 
@@ -209,15 +209,15 @@ diagnostics: structure.content_before_first_heading, heading.skipped_level, stru
 cd book-import
 npm install            # installs both workspace packages (and the tree-sitter grammars)
 npm test               # parser tests (node --test)
-npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown   # writes book-output.md: contents, diagnostics, code analysis, and the book re-assembled by chapter
+npm run dry-run        # the book in UPLOAD_BOOK_PATH (.env); writes book-output.md: contents, diagnostics, code analysis, and the book re-assembled by chapter
 
 createdb loony_library
 psql "$DATABASE_URL" -f packages/migration/schema.sql
 (cd ../backend && npm run migrate)             # later schema changes, incl. 004 (block types, roles)
 cp .env.example .env   # set DATABASE_URL
-npm run load -- <markdown-dir> [--category <slug>] [--title T] [--author A]   # first load
-npm run reload -- <markdown-dir>                # re-parse + wipe-and-reload (deletes by title, cascades)
-# with no <markdown-dir>, UPLOAD_BOOK_PATH from .env is used
+npm run load -- [--category <slug>] [--title T] [--author A]   # first load
+npm run reload                                  # re-parse + wipe-and-reload (deletes by title, cascades)
+# the book is always UPLOAD_BOOK_PATH in .env - change it there to switch books
 ```
 
 After a `reload`, restart the backend — book ids are memoized per-slug for the process lifetime, so it'll keep pointing at the deleted row until it's bounced.

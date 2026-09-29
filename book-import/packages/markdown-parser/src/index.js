@@ -63,6 +63,20 @@ function bookMetadata(sourceDir, files, overrides, diagnostics) {
   return { slug: overrides.slug ?? slugify(title), title, author: overrides.author ?? null, sourceDir };
 }
 
+// An error in how a command was invoked or configured (bad option, missing
+// or wrong UPLOAD_BOOK_PATH) - CLIs print just the message, no stack.
+export class UsageError extends Error {}
+
+// The book to parse is always UPLOAD_BOOK_PATH from book-import/.env.
+export function bookDirFromEnv() {
+  const dir = process.env.UPLOAD_BOOK_PATH?.trim();
+  if (!dir) throw new UsageError("UPLOAD_BOOK_PATH is not set. Put the book's Markdown directory in book-import/.env, e.g. UPLOAD_BOOK_PATH=/home/me/.output/NodeJs/Beginning_Nodejs/markdown");
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    throw new UsageError(`UPLOAD_BOOK_PATH in book-import/.env is not a directory: ${dir}`);
+  }
+  return dir;
+}
+
 /**
  * Parses a book's Markdown directory into the outline the migration package
  * loads into Postgres. Synchronous; code blocks come back with

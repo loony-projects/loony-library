@@ -28,7 +28,8 @@ createdb loony_library
 psql "$DATABASE_URL" -f book-import/packages/migration/schema.sql
 cd book-import && npm install && cp .env.example .env
 (cd ../backend && npm install && cp .env.example .env && npm run migrate)   # later schema changes; the loader needs them
-npm run load -- ~/.output/<Topic>/<Book>/markdown   # the book's Markdown directory
+# set UPLOAD_BOOK_PATH in .env to the book's Markdown directory, then:
+npm run load
 
 # 2. Backend (uses book-import's markdown parser, installed above)
 cd ../backend

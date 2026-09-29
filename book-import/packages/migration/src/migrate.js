@@ -3,17 +3,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
 import pg from "pg";
-import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown } from "@loony-library/markdown-parser";
+import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown, bookDirFromEnv, UsageError } from "@loony-library/markdown-parser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
-// Usage: migrate.js <markdown-dir> [--title T] [--slug S] [--author A]
-//                   [--category <slug>] [--reset] [--allow-errors] [--out book-output.md]
-// <markdown-dir> defaults to UPLOAD_BOOK_PATH (see .env.example). Title and
-// slug are otherwise derived from the directory (see parseBookDirectory).
+// Usage: migrate.js [--title T] [--slug S] [--author A] [--category <slug>]
+//                   [--reset] [--allow-errors] [--out book-output.md]
+// The book's Markdown directory is UPLOAD_BOOK_PATH in .env (see
+// .env.example). Title and slug are otherwise derived from the directory
+// (see parseBookDirectory).
 function parseArgs(argv) {
-  const args = { dir: null, reset: false, out: null, allowErrors: false, category: null, overrides: {} };
+  const args = { reset: false, out: null, allowErrors: false, category: null, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--reset") args.reset = true;
@@ -23,11 +24,9 @@ function parseArgs(argv) {
     else if (arg === "--title") args.overrides.title = argv[++i];
     else if (arg === "--slug") args.overrides.slug = argv[++i];
     else if (arg === "--author") args.overrides.author = argv[++i];
-    else if (arg.startsWith("--")) throw new Error(`Unknown option ${arg}`);
-    else args.dir = arg;
+    else if (arg.startsWith("--")) throw new UsageError(`Unknown option ${arg}`);
+    else throw new UsageError(`Unexpected argument "${arg}". Set the book's Markdown directory as UPLOAD_BOOK_PATH in .env instead.`);
   }
-  args.dir ??= process.env.UPLOAD_BOOK_PATH || null;
-  if (!args.dir) throw new Error("Pass the book's Markdown directory (or set UPLOAD_BOOK_PATH in .env)");
   return args;
 }
 
@@ -204,9 +203,9 @@ async function loadIntoPostgres(data) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL is not set (see .env.example)");
+    throw new UsageError("DATABASE_URL is not set in book-import/.env (see .env.example)");
   }
-  const data = parseBookDirectory(args.dir, args.overrides);
+  const data = parseBookDirectory(bookDirFromEnv(), args.overrides);
   data.book.category = args.category;
   console.log(`${data.book.title} (${data.book.slug}) from ${data.book.sourceDir} [${data.book.strategy}]`);
   console.log(summarize(data));
@@ -228,6 +227,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(err instanceof UsageError ? `Error: ${err.message}` : err);
   process.exit(1);
 });

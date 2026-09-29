@@ -18,13 +18,14 @@ structure are derived from the directory — see [../docs/migration.md](../docs/
 ```sh
 npm install                                                   # installs both packages
 npm test                                                      # parser tests
-npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown # -> book-output.md (readable report), no DB needed
-npm run load -- ~/.output/NodeJs/Beginning_Nodejs/markdown --category programming-languages
+# set UPLOAD_BOOK_PATH in .env to the book's Markdown directory first
+npm run dry-run                                               # -> book-output.md (readable report), no DB needed
+npm run load -- --category programming-languages
                                                               # requires DATABASE_URL (see .env.example), packages/migration/schema.sql
                                                               # and the backend's migrations (cd ../backend && npm run migrate)
 ```
 
-Without a directory argument, `UPLOAD_BOOK_PATH` from `.env` is used.
+The book is always `UPLOAD_BOOK_PATH` from `.env`; to switch books, change it there.
 `dry-run` flags: `--out <file>`, `--title`, `--slug`, `--no-analyze` (skip
 syntax analysis), `--all-diagnostics` (print info-level diagnostics too).
 `load`/`reload` flags: `--title`, `--slug`, `--author`, `--category <slug>`,
