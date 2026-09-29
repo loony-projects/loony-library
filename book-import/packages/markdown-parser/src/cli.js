@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import "dotenv/config";
-import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics } from "./index.js";
+import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics, renderBookMarkdown } from "./index.js";
 
-// Usage: cli.js <markdown-dir> [--out outline.json] [--title T] [--slug S]
+// Usage: cli.js <markdown-dir> [--out book-output.md] [--title T] [--slug S]
 //                              [--no-analyze] [--all-diagnostics]
 // <markdown-dir> defaults to UPLOAD_BOOK_PATH (see .env.example).
 function parseArgs(argv) {
-  const args = { dir: null, out: "outline.json", analyze: true, allDiagnostics: false, overrides: {} };
+  const args = { dir: null, out: "book-output.md", analyze: true, allDiagnostics: false, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--out") args.out = argv[++i];
@@ -30,7 +30,7 @@ async function main() {
   console.log(`${outline.book.title} (${outline.book.slug}) from ${outline.book.sourceDir} [${outline.book.strategy}]`);
   console.log(summarize(outline));
   printDiagnostics(outline.diagnostics, { all: args.allDiagnostics });
-  fs.writeFileSync(args.out, JSON.stringify(outline, null, 2));
+  fs.writeFileSync(args.out, renderBookMarkdown(outline));
   console.log(`Wrote ${args.out}`);
 }
 

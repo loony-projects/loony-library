@@ -3,13 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
 import pg from "pg";
-import { parseBookDirectory, summarize, printDiagnostics, countBySeverity } from "@loony-library/markdown-parser";
+import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown } from "@loony-library/markdown-parser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
 // Usage: migrate.js <markdown-dir> [--title T] [--slug S] [--author A]
-//                   [--category <slug>] [--reset] [--allow-errors] [--out outline.json]
+//                   [--category <slug>] [--reset] [--allow-errors] [--out book-output.md]
 // <markdown-dir> defaults to UPLOAD_BOOK_PATH (see .env.example). Title and
 // slug are otherwise derived from the directory (see parseBookDirectory).
 function parseArgs(argv) {
@@ -219,7 +219,7 @@ async function main() {
   }
 
   if (args.out) {
-    fs.writeFileSync(args.out, JSON.stringify(data, null, 2));
+    fs.writeFileSync(args.out, renderBookMarkdown(data));
     console.log(`Wrote ${args.out}`);
   }
 

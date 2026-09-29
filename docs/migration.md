@@ -209,7 +209,7 @@ diagnostics: structure.content_before_first_heading, heading.skipped_level, stru
 cd book-import
 npm install            # installs both workspace packages (and the tree-sitter grammars)
 npm test               # parser tests (node --test)
-npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown   # writes outline.json (with code analysis), no DB needed
+npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown   # writes book-output.md: contents, diagnostics, code analysis, and the book re-assembled by chapter
 
 createdb loony_library
 psql "$DATABASE_URL" -f packages/migration/schema.sql

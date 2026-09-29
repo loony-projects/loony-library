@@ -6,7 +6,7 @@ import { buildOutlineByToc } from "./buildOutlineByToc.js";
 import { parseFile } from "./parseFile.js";
 import { collectTerms } from "./extractTermList.js";
 import { finalizeOutline } from "./finalize.js";
-import { createDiagnostics, countBySeverity } from "./diagnostics.js";
+import { createDiagnostics } from "./diagnostics.js";
 import "./analysis/index.js"; // registers the built-in analyzers before any parse
 
 // Pipeline (see docs/migration.md):
@@ -23,6 +23,8 @@ export { extractTermList, extractTermEntries, collectTerms, termKey } from "./ex
 export { registerLanguage, normalizeLanguage, parseFenceInfo, getLanguage, listLanguages } from "./languages.js";
 export { analyzeCodeBlocks, registerAnalyzer, unregisterAnalyzer, getAnalyzer, hasAnalyzer } from "./analysis/index.js";
 export { formatDiagnostic, countBySeverity, printDiagnostics } from "./diagnostics.js";
+export { countBlocks, summarize } from "./stats.js";
+export { renderBookMarkdown } from "./bookOutput.js";
 export { ROLES, normalizeRole } from "./roles.js";
 export { parseHeadingText } from "./headings.js";
 
@@ -129,29 +131,4 @@ export function parseBookMarkdown(input, options = {}) {
     diagnostics,
   });
   return assemble(book, chapters, diagnostics);
-}
-
-export function countBlocks(chapters) {
-  let sections = 0;
-  let blocks = 0;
-  const walk = (nodes) => {
-    for (const s of nodes) {
-      sections++;
-      blocks += s.blocks.length;
-      walk(s.children);
-    }
-  };
-  chapters.forEach((c) => walk(c.sections));
-  return { sections, blocks };
-}
-
-export function summarize(outline) {
-  const { sections, blocks } = countBlocks(outline.chapters);
-  const counts = countBySeverity(outline.diagnostics ?? []);
-  return (
-    `Parsed ${outline.chapters.length} chapters, ${sections} sections, ${blocks} content blocks, ` +
-    `${outline.codeBlocks?.length ?? 0} code blocks, ` +
-    `${outline.glossary.length} glossary terms, ${outline.symbols.length} symbols. ` +
-    `Diagnostics: ${counts.error} errors, ${counts.warning} warnings, ${counts.info} info.`
-  );
 }

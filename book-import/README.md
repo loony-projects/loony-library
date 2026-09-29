@@ -18,7 +18,7 @@ structure are derived from the directory — see [../docs/migration.md](../docs/
 ```sh
 npm install                                                   # installs both packages
 npm test                                                      # parser tests
-npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown # -> outline.json (+ code analysis), no DB needed
+npm run dry-run -- ~/.output/NodeJs/Beginning_Nodejs/markdown # -> book-output.md (readable report), no DB needed
 npm run load -- ~/.output/NodeJs/Beginning_Nodejs/markdown --category programming-languages
                                                               # requires DATABASE_URL (see .env.example), packages/migration/schema.sql
                                                               # and the backend's migrations (cd ../backend && npm run migrate)

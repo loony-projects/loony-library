@@ -237,6 +237,8 @@ export function analyzeCodeBlocks<R extends BookParseResult>(result: R, options?
 export function parseFile(source: string, options?: { file?: string | null; diagnostics?: Diagnostics | null }): ParsedItem[];
 export function astOf(item: object): unknown;
 export function summarize(result: BookParseResult): string;
+/** The readable report the CLI writes to book-output.md. */
+export function renderBookMarkdown(result: BookParseResult): string;
 export function countBlocks(chapters: Chapter[]): { sections: number; blocks: number };
 export function formatDiagnostic(diagnostic: ParseDiagnostic): string;
 export function countBySeverity(diagnostics: ParseDiagnostic[]): Record<Severity, number>;

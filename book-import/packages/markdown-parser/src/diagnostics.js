@@ -49,5 +49,5 @@ const PRINT_LIMIT = 20;
 export function printDiagnostics(diagnostics, { all = false, log = console.log } = {}) {
   const shown = all ? diagnostics : diagnostics.filter((d) => d.severity !== "info");
   for (const d of shown.slice(0, all ? shown.length : PRINT_LIMIT)) log(`  ${formatDiagnostic(d)}`);
-  if (!all && shown.length > PRINT_LIMIT) log(`  ... ${shown.length - PRINT_LIMIT} more (see "diagnostics" in the outline)`);
+  if (!all && shown.length > PRINT_LIMIT) log(`  ... ${shown.length - PRINT_LIMIT} more (see "Diagnostics" in book-output.md)`);
 }

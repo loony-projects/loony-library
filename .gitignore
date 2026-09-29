@@ -10,7 +10,7 @@ frontend/.env
 book-import/.env
 
 # Generated parser output (see docs/migration.md)
-book-import/outline.json
+book-import/book-output.md
 backend/data/
 
 # Logs
