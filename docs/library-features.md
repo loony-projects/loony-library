@@ -9,7 +9,7 @@ npm run migrate
 npm start
 ```
 
-For an empty database, first run `book-import/packages/migration/schema.sql`, then `npm run migrate`.
+For an empty database, run `npm run migrate` in `backend/` — it creates the whole schema.
 The migration runner records applied migrations and can be rerun safely. It
 preserves existing books and sections as published. Their `created_at` values
 are the upgrade time because their original creation dates were never stored.

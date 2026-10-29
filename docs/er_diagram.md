@@ -1,6 +1,6 @@
 # Loony Library — ER Diagram
 
-Entity-relationship diagram for the schema described in [app_idea.md](./app_idea.md) and implemented in [book-import/packages/migration/schema.sql](../book-import/packages/migration/schema.sql).
+Entity-relationship diagram for the schema described in [app_idea.md](./app_idea.md) and implemented in [backend/migrations/001-schema.sql](../backend/migrations/001-schema.sql).
 
 ```mermaid
 erDiagram

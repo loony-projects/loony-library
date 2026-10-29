@@ -25,9 +25,8 @@ See [docs/dev_setup.md](docs/dev_setup.md) for the full walkthrough. In short:
 ```sh
 # 1. Database (once per book — see docs/migration.md)
 createdb loony_library
-psql "$DATABASE_URL" -f book-import/packages/migration/schema.sql
 cd book-import && npm install && cp .env.example .env
-(cd ../backend && npm install && cp .env.example .env && npm run migrate)   # later schema changes; the loader needs them
+(cd ../backend && npm install && cp .env.example .env && npm run migrate)   # creates the schema
 # set UPLOAD_BOOK_PATH in .env to the book's Markdown directory, then:
 npm run load
 

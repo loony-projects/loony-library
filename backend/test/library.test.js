@@ -21,12 +21,7 @@ test("API integration in isolated schema", async () => {
   try {
     await admin.query(`create schema ${schema}`);
     pool.options.options = `-c search_path=${schema},public`;
-    await pool.query(
-      await fs.readFile(
-        new URL("../../book-import/packages/migration/schema.sql", import.meta.url),
-        "utf8",
-      ),
-    );
+    // The whole schema comes from the migrations (001-schema.sql first).
     const migrations = new URL("../migrations/", import.meta.url);
     for (const name of (await fs.readdir(migrations)).sort())
       await pool.query(await fs.readFile(new URL(name, migrations), "utf8"));
@@ -171,7 +166,7 @@ test("API integration in isolated schema", async () => {
     );
     // Saved markdown goes through the book-import parser: fence meta and the
     // normalized language survive, and breaks/footnotes are stored as their
-    // own block types (migrations/004) instead of being dropped.
+    // own block types instead of being dropped.
     const rich = await call(
       "POST",
       `/books/${slug}/chapters`,

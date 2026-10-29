@@ -1,8 +1,8 @@
 # book-import
 
-Turns a book's markdown source into the Postgres schema defined in
-[packages/migration/schema.sql](./packages/migration/schema.sql). An npm
-workspace of two packages:
+Turns a book's markdown source into rows of the Postgres schema defined in
+[backend/migrations/001-schema.sql](../backend/migrations/001-schema.sql). An
+npm workspace of two packages:
 
 - [packages/markdown-parser](./packages/markdown-parser/) — markdown → outline
   (`{ book, chapters, glossary, symbols, codeBlocks, diagnostics }`), no
@@ -21,8 +21,8 @@ npm test                                                      # parser tests
 # set UPLOAD_BOOK_PATH in .env to the book's Markdown directory first
 npm run dry-run                                               # -> book-output.md (readable report), no DB needed
 npm run load -- --category programming-languages
-                                                              # requires DATABASE_URL (see .env.example), packages/migration/schema.sql
-                                                              # and the backend's migrations (cd ../backend && npm run migrate)
+                                                              # requires DATABASE_URL (see .env.example) and the schema
+                                                              # (cd ../backend && npm run migrate)
 ```
 
 The book is always `UPLOAD_BOOK_PATH` from `.env`; to switch books, change it there.
