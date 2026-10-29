@@ -1,0 +1,95 @@
+# Loony Library: Postgres + API + frontend.
+#
+#   cp .env.example .env          # then edit it (DB password, loony-auth client)
+#   docker compose up -d --build  # http://localhost:8080 (API on :4000)
+#   docker compose down           # stop (data is kept in volumes)
+#
+# Load a book (its Markdown directory on this machine):
+#   BOOK_DIR=/home/me/.output/NodeJs/Beginning_Nodejs/markdown \
+#     docker compose run --rm import --category programming-languages
+#
+# Settings come from .env next to this file (see .env.example).
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-loony_library}
+      POSTGRES_USER: ${POSTGRES_USER:-loony}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    # The schema comes from backend/migrations, applied by the backend on
+    # every start (001-schema.sql creates it on an empty database).
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: loony-library-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &backend-env
+      DATABASE_URL: postgres://${POSTGRES_USER:-loony}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-loony_library}
+      PORT: 4000
+      NODE_ENV: ${NODE_ENV:-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      LOONY_AUTH_URL: ${LOONY_AUTH_URL:-http://localhost:8450}
+      CLIENT_ID: ${CLIENT_ID:-}
+      TENANT_ID: ${TENANT_ID:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-http://localhost:4000/api/auth/callback}
+    volumes:
+      - backend-data:/app/backend/data
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
+    image: loony-library-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+  # The book loader (book-import/packages/migration), run on demand. Reads
+  # the book from BOOK_DIR on this machine; writes to the database and copies
+  # page images into the volume the backend serves.
+  import:
+    image: loony-library-backend
+    profiles: ["tools"]
+    depends_on:
+      db:
+        condition: service_healthy
+    working_dir: /app/book-import
+    entrypoint: ["node", "packages/migration/src/migrate.js"]
+    environment:
+      <<: *backend-env
+      UPLOAD_BOOK_PATH: /book
+    volumes:
+      - backend-data:/app/backend/data
+      # Never let Docker create a missing BOOK_DIR (it would make empty,
+      # root-owned folders on this machine): fail instead.
+      - type: bind
+        source: ${BOOK_DIR:-/nonexistent-set-BOOK_DIR}
+        target: /book
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  db-data:
+  backend-data:

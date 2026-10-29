@@ -221,7 +221,7 @@ npm run reload                                  # re-parse + wipe-and-reload (de
 
 New books and their sections are drafts unless loaded with `--publish`.
 
-After a `reload`, restart the backend — book ids are memoized per-slug for the process lifetime, so it'll keep pointing at the deleted row until it's bounced.
+After a `reload`, restart the backend — book ids are memoized per-slug for the process lifetime, so it'll keep pointing at the deleted row until it's bounced (Docker: `docker compose restart backend`).
 
 ## Verified against the real source
 

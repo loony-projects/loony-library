@@ -1,0 +1,11 @@
+# Keep the build context small and free of secrets/local state.
+.git
+**/node_modules
+**/.env
+.env
+.run
+backend/data
+frontend/dist
+book-import/book-output.md
+docs
+*.log

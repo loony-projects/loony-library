@@ -5,6 +5,7 @@ node_modules/
 frontend/dist/
 
 # Local environment config (see .env.example in each project)
+/.env
 backend/.env
 frontend/.env
 book-import/.env

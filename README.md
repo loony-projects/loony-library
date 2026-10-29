@@ -41,6 +41,32 @@ npm run dev              # http://localhost:5173
 
 Open `http://localhost:5173` — it lists every loaded book; picking one opens its reader with a sidebar table of contents, full-text search, and a glossary/abbreviations page.
 
+## Docker
+
+Everything in containers - Postgres, the API and the built frontend:
+
+```sh
+cp .env.example .env              # set POSTGRES_PASSWORD (and the loony-auth client, for sign-in)
+docker compose up -d --build      # frontend http://localhost:8080, API http://localhost:4000
+docker compose down               # stop; data stays in the db-data / backend-data volumes
+```
+
+The backend applies `backend/migrations` every time it starts, so a fresh
+database gets the whole schema on first start. Load a book from its Markdown
+directory on this machine (a missing directory is an error, never created):
+
+```sh
+BOOK_DIR=/home/me/.output/Kotlin/Kotlin/markdown \
+  docker compose run --rm import --category programming-languages --publish
+docker compose restart backend    # after reloading a book that was already there
+```
+
+`VITE_API_URL` is compiled into the frontend image - rebuild after changing it.
+Files: [docker-compose.yml](docker-compose.yml), [docker/](docker/), [.env.example](.env.example).
+
+For running without Docker, `scripts/start.sh` / `scripts/stop.sh` start and stop
+the dev servers - see [docs/dev_setup.md](docs/dev_setup.md#starting-and-stopping).
+
 ## Adding a book
 
 The platform is book-agnostic: a book is just a directory of Markdown (e.g. pdf-to-md output). Point the loader at it — title, slug and structure are derived from the directory. No code changes needed to add a new one — see [docs/migration.md](docs/migration.md).
