@@ -9,7 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
 // Usage: migrate.js [--title T] [--slug S] [--author A] [--category <slug>]
-//                   [--reset] [--allow-errors] [--out book-output.md]
+//                   [--publish] [--reset] [--allow-errors] [--out book-output.md]
+// New books - and their sections - are drafts (hidden from readers) unless
+// --publish is given.
 // The book's Markdown directory is UPLOAD_BOOK_PATH in .env (see
 // .env.example). Title and slug are otherwise derived from the directory
 // (see parseBookDirectory).
@@ -19,6 +21,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === "--reset") args.reset = true;
     else if (arg === "--allow-errors") args.allowErrors = true;
+    else if (arg === "--publish") args.publish = true;
     else if (arg === "--out") args.out = argv[++i];
     else if (arg === "--category") args.category = argv[++i];
     else if (arg === "--title") args.overrides.title = argv[++i];
@@ -97,8 +100,8 @@ async function loadIntoPostgres(data) {
     const {
       rows: [{ id: bookId }],
     } = await client.query(
-      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id, status)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
       [
         data.book.slug,
         data.book.title,
@@ -109,6 +112,7 @@ async function loadIntoPostgres(data) {
         data.book.price,
         data.book.published_year,
         categoryId,
+        data.publish ? "published" : "draft",
       ]
     );
 
@@ -125,8 +129,8 @@ async function loadIntoPostgres(data) {
         const {
           rows: [{ id: sectionId }],
         } = await client.query(
-          `insert into sections (chapter_id, parent_id, numbering, title, depth, sort_order, source_file, role)
-           values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+          `insert into sections (chapter_id, parent_id, numbering, title, depth, sort_order, source_file, role, status)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
           [
             chapterId,
             parentId,
@@ -136,6 +140,7 @@ async function loadIntoPostgres(data) {
             section.sort_order,
             section.source_file,
             section.role,
+            data.publish ? "published" : "draft",
           ]
         );
 
@@ -191,7 +196,10 @@ async function loadIntoPostgres(data) {
     }
 
     await client.query("commit");
-    console.log(`Loaded book "${data.book.title}" (id=${bookId}, slug=${data.book.slug}) into Postgres.`);
+    console.log(
+      `Loaded book "${data.book.title}" (id=${bookId}, slug=${data.book.slug}) into Postgres as ` +
+        (data.publish ? "published." : "a draft - publish it in the app, or reload with --publish.")
+    );
   } catch (err) {
     await client.query("rollback");
     throw err;
@@ -214,7 +222,7 @@ async function main() {
   // around; an error means the parse is known to be incomplete, so don't
   // load it unless asked.
   if (countBySeverity(data.diagnostics).error && !args.allowErrors) {
-    throw new Error("Parse reported errors (listed above); fix them or pass --allow-errors to load anyway.");
+    throw new UsageError("Parse reported errors (listed above); fix them or pass --allow-errors to load anyway.");
   }
 
   if (args.out) {
@@ -223,7 +231,7 @@ async function main() {
   }
 
   resolveAndCopyImages(data.chapters, data.book);
-  await loadIntoPostgres({ ...data, reset: args.reset });
+  await loadIntoPostgres({ ...data, reset: args.reset, publish: args.publish });
 }
 
 main().catch((err) => {

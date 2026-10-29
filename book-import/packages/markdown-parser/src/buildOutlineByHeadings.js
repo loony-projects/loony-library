@@ -152,7 +152,7 @@ export function buildOutlineByHeadings(files, options, { diagnostics }) {
     current = section;
   }
 
-  if (!allItems.length) diagnostics.warning("source.empty", "Book source contains no content.", {});
+  if (!allItems.length) diagnostics.error("source.empty", "Book source contains no content (no Markdown, or only empty files).", {});
   return chapters;
 }
 

@@ -141,7 +141,7 @@ The grammars are WASM builds loaded through `web-tree-sitter` (no native compila
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `source.empty` | warning | No content at all. |
+| `source.empty` | error | No content at all (an empty or wrong book directory) — the loader refuses it. |
 | `source.missing_file` | warning | A `numbering` front-matter file listed in `FRONT_MATTER_FILES` doesn't exist. |
 | `source.bad_metadata` | warning | `<name>_metadata.json` isn't valid JSON; title taken from the folder name. |
 | `source.file_not_in_outline` | warning | `numbering`: a root file not in `FRONT_MATTER_FILES`. |
@@ -218,6 +218,8 @@ npm run load -- [--category <slug>] [--title T] [--author A]   # first load
 npm run reload                                  # re-parse + wipe-and-reload (deletes by title, cascades)
 # the book is always UPLOAD_BOOK_PATH in .env - change it there to switch books
 ```
+
+New books and their sections are drafts unless loaded with `--publish`.
 
 After a `reload`, restart the backend — book ids are memoized per-slug for the process lifetime, so it'll keep pointing at the deleted row until it's bounced.
 

@@ -29,4 +29,7 @@ The book is always `UPLOAD_BOOK_PATH` from `.env`; to switch books, change it th
 `dry-run` flags: `--out <file>`, `--title`, `--slug`, `--no-analyze` (skip
 syntax analysis), `--all-diagnostics` (print info-level diagnostics too).
 `load`/`reload` flags: `--title`, `--slug`, `--author`, `--category <slug>`,
-`--allow-errors` (load even if the parse reported errors), `--out <file>`.
+`--allow-errors` (load even if the parse reported errors), `--out <file>`,
+`--publish` (make the book and its sections visible to readers right away -
+otherwise they're drafts). After reloading a book that was already loaded,
+restart the backend: it caches book ids by slug.
