@@ -36,6 +36,22 @@ npm run dev              # http://localhost:5173
 
 Open `http://localhost:5173` — it lists every loaded book; picking one redirects to its first section, with a sidebar table of contents (from `/api/books/:slug/toc`), full-text search, and an Abbreviations page.
 
+## Starting and stopping
+
+Once both are installed and configured, from the repo root:
+
+```sh
+scripts/start.sh            # backend + frontend in the background
+scripts/start.sh backend    # or just one: backend | frontend
+scripts/stop.sh             # stop both (or: scripts/stop.sh backend | frontend)
+```
+
+`start.sh` waits until each app answers (`/api/health`, then the Vite page) and
+says where it's running; logs are in `.run/backend.log` and `.run/frontend.log`.
+Ports: backend `PORT` from `backend/.env` (4000), frontend `FRONTEND_PORT`
+(default 5173). Running `start.sh` again while an app is up does nothing;
+`stop.sh` also stops an app started by hand on those ports.
+
 ## Architecture recap
 
 ```
