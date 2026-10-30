@@ -1,5 +1,6 @@
 import { astOf } from "./parseFile.js";
 import { plainText } from "./text.js";
+import { normalizeRole } from "./roles.js";
 
 // Reads a book's own table of contents - the printed "Contents" page(s) of
 // a PDF-converted book - into its top-level entries (chapters, parts,
@@ -133,7 +134,9 @@ function pageCandidates(items) {
         if (first?.type !== "paragraph") return;
         const number = node.ordered ? `${(node.start ?? 1) + index} ` : "";
         const c = candidate(number + plainText(first), { emphasized: hasEmphasis(first) });
-        if (c?.printed) out.push(c);
+        // Kept even without a page number: a contents page that is just a
+        // list of chapter titles uses these (see readTableOfContents).
+        if (c) out.push({ ...c, listItem: true });
       });
     } else if (node.type === "paragraph") {
       const lines = paragraphLines(node);
@@ -178,6 +181,18 @@ function classify(c, { afterChapters }) {
   return null;
 }
 
+// An entry of a bare-list contents page: labelled entries as usual, a title
+// naming a book part ("Preface", "Index") as matter, anything else the next
+// chapter.
+function classifyListed(c, nextNumber) {
+  let m;
+  if ((m = c.title.match(CHAPTER_RE))) return { kind: "chapter", number: toNumber(m[1]), title: m[2].trim() };
+  if ((m = c.title.match(PART_RE))) return { kind: "part", number: m[1], title: m[2].trim() };
+  if ((m = c.title.match(APPENDIX_RE))) return { kind: "appendix", number: m[1].toUpperCase(), title: m[2].trim() };
+  if (normalizeRole(c.title.replace(/\s+/g, "-"))) return { kind: "matter", number: null, title: c.title };
+  return { kind: "chapter", number: nextNumber(), title: c.title };
+}
+
 /**
  * Finds the contents page(s) among a book's parsed pages and returns
  * { tocPageIndex, lastTocPageIndex, entries, ignored } or null when there is none.
@@ -196,13 +211,21 @@ export function readTableOfContents(pages) {
   let lastChapter = 0;
   let lastTocPageIndex = tocPageIndex;
   let afterChapters = false;
+  // A contents page with no page numbers at all, only a list of titles
+  // ("## CHAPTERS" then "* Understanding Large Language Models", ...): its
+  // list items are the entries, in order. Unlabelled ones are chapters
+  // numbered by position; "Appendix A. ..." / "Part ..." keep their label.
+  const bareList =
+    !pageCandidates(pages[tocPageIndex].items).some((c) => c.printed) &&
+    pageCandidates(pages[tocPageIndex].items).some((c) => c.listItem);
+  let bareChapter = 0;
   for (let i = tocPageIndex; i < pages.length && i <= tocPageIndex + MAX_EXTRA_PAGES; i++) {
-    const candidates = pageCandidates(pages[i].items);
+    const candidates = pageCandidates(pages[i].items).filter((c) => (bareList ? c.listItem : c.printed || !c.listItem));
     const found = candidates.filter((c) => c.printed).length;
     if (i > tocPageIndex && !found) break;
     lastTocPageIndex = i;
     for (const c of candidates) {
-      const entry = classify(c, { afterChapters });
+      const entry = bareList ? classifyListed(c, () => String(++bareChapter)) : classify(c, { afterChapters });
       if (!entry || !entry.title && entry.kind === "matter") continue;
       if (entry.kind === "ignored") {
         ignored.push({ raw: c.raw, file: pages[i].file });

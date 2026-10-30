@@ -136,3 +136,17 @@ test("extractTermList keeps its { term, expansion } shape", () => {
     { term: "API", expansion: "Application Programming Interface" },
   ]);
 });
+
+test("given a pdf-to-md book folder, its markdown/ subfolder is read", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "md-parser-"));
+  const book = path.join(base, "Build-LLM-1");
+  fs.mkdirSync(path.join(book, "markdown"), { recursive: true });
+  fs.mkdirSync(path.join(book, "pages"));
+  fs.writeFileSync(path.join(book, "Build-LLM-1.pdf"), "");
+  fs.writeFileSync(path.join(book, "markdown", "b_page_0001.md"), CONTENTS);
+  fs.writeFileSync(path.join(book, "markdown", "b_page_0002.md"), "# Understanding Node.js\n\nText.\n");
+  const result = parseBookDirectory(book);
+  assert.equal(result.book.sourceDir, path.join(book, "markdown"));
+  assert.equal(result.book.title, "Build-LLM-1");
+  assert.equal(result.chapters.filter((c) => c.role === "chapter").length, 1);
+});

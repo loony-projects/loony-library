@@ -183,3 +183,46 @@ test("chapter numbers that go backwards in the contents are ignored as noise", (
   assert.deepEqual(result.chapters.slice(1).map((c) => c.title), ["Alpha", "Beta"]);
   assert.ok(codes(result).includes("toc.ignored_entry"));
 });
+
+test("a contents page that is only a list of titles: its items are the chapters, in order", () => {
+  const pages = [
+    [
+      "## **CHAPTERS**",
+      "",
+      "* Understanding Large Language Models ",
+      "* Working with Text Data ",
+      "* Finetuning to Follow Instructions*",
+      "",
+      "* Appendix A. Introduction to PyTorch*",
+    ].join("\n"),
+    "## [1](https://example.com/chapter-1) Understanding Large Language Models\n\nLLMs are...\n\n## 1[.2](https://example.com) Applications of LLMs\n\nMany.",
+    "## [2](https://example.com/chapter-2) Working with Text Data\n\nTokens.",
+    "More about tokens.",
+    "## [3](https://example.com/chapter-3) Finetuning to Follow Instructions\n\nInstructions.",
+    "## Appendix A. Introduction to PyTorch\n\nTensors.",
+  ];
+  const result = parseBookDirectory(pagesDir(pages));
+  assert.deepEqual(outline(result), [
+    ["front_matter", null, "Front Matter", "p1.md"],
+    ["chapter", "1", "Understanding Large Language Models", "p2.md"],
+    ["chapter", "2", "Working with Text Data", "p3.md"],
+    ["chapter", "3", "Finetuning to Follow Instructions", "p5.md"],
+    ["appendix", "A", "Introduction to PyTorch", "p6.md"],
+  ]);
+  const one = result.chapters[1].sections[0].blocks;
+  assert.deepEqual(one.map((b) => [b.block_type, b.content.text]), [
+    ["paragraph", "LLMs are..."],
+    ["subheading", "1.2 Applications of LLMs"],
+    ["paragraph", "Many."],
+  ]);
+  assert.equal(result.chapters[2].sections[0].blocks.at(-1).content.text, "More about tokens.");
+});
+
+test("list items without page numbers are not chapters when the contents page has page numbers", () => {
+  const pages = [
+    ["# Contents", "", "**1 Alpha** 2", "", "- just a note", "- another note"].join("\n"),
+    "## Alpha\n\nA.",
+  ];
+  const result = parseBookDirectory(pagesDir(pages));
+  assert.deepEqual(result.chapters.map((c) => c.title), ["Front Matter", "Alpha"]);
+});

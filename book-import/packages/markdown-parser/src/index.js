@@ -80,9 +80,16 @@ export function bookDirFromEnv() {
  */
 export function parseBookDirectory(dir, overrides = {}) {
   if (!dir) throw new Error("A Markdown directory is required");
-  const sourceDir = path.resolve(dir);
+  let sourceDir = path.resolve(dir);
   if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
     throw new Error(`Not a directory: ${sourceDir}`);
+  }
+  // pdf-to-md lays a book out as <book>/{<book>.pdf, markdown/, pages/}:
+  // given the book folder itself, read its markdown/ subfolder.
+  const hasMarkdown = (d) => fs.readdirSync(d).some((f) => f.endsWith(".md"));
+  const markdownDir = path.join(sourceDir, "markdown");
+  if (!hasMarkdown(sourceDir) && fs.existsSync(markdownDir) && fs.statSync(markdownDir).isDirectory()) {
+    sourceDir = markdownDir;
   }
   const diagnostics = createDiagnostics();
   const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
