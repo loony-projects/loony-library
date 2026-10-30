@@ -1,10 +1,12 @@
-import { readTableOfContents, cleanTocText } from "./toc.js";
-import { slugify } from "./buildOutlineByHeadings.js";
+import { readTableOfContents, cleanTocText, TOC_HEADINGS } from "./toc.js";
+import { normalizeRole } from "./roles.js";
 
-// Stage 3 - book structure from the book's own table of contents (strategy
-// "toc"). Used for a Markdown directory whose pages include a contents page
-// (see toc.js); the converter's heading levels are not used to decide what
-// a chapter is.
+// Stage 3 - book structure. Chapters come only from the book's own table of
+// contents: a page headed "Contents", "Table of Contents", "Contents at a
+// Glance", "Brief Contents" or "Chapters" (see toc.js). Headings in the
+// pages never decide what is a chapter or a section; a book without a
+// usable contents page is reported (toc.not_found / toc.insufficient) and
+// gets no chapters.
 //
 // 1. Read the top-level entries of the contents page(s).
 // 2. Place each entry in the page sequence:
@@ -20,14 +22,26 @@ import { slugify } from "./buildOutlineByHeadings.js";
 //    the previous element.
 // 3. Everything before the first placed entry (cover, copyright, the
 //    contents pages themselves) is a "Front Matter" element. Each entry's
-//    element runs from its start to the next entry's start. Its opening
-//    title heading(s) are consumed; other headings become sections - flat,
-//    except dotted numbering ("1.1" > "1.1.2"), which nests.
+//    element runs from its start to the next entry's start and is one
+//    section: its opening title heading(s) are consumed, and every other
+//    heading stays in place as a `subheading` block.
 //
-// Returns null (caller falls back to "headings") when there's no contents
-// page or fewer than two entries could be placed.
+// Roles: chapter / part / appendix from the entry's label ("Chapter 3",
+// "Part II", "Appendix A"); an unnumbered entry whose whole title names a
+// book part ("Preface", "Glossary", "Index", "Acknowledgments", ...) gets
+// that role, any other one front_matter or back_matter by position.
 
 const SEARCH_WINDOW = 2;
+
+export function slugify(text) {
+  const slug = text
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "untitled";
+}
 
 function pageNumberOf(file, index) {
   const match = file?.match(/_page_(\d+)\.md$/);
@@ -104,7 +118,15 @@ function anchorChain(pairs) {
 
 export function buildOutlineByToc(pages, { diagnostics }) {
   const toc = readTableOfContents(pages);
-  if (!toc) return null;
+  if (!toc) {
+    diagnostics.error(
+      "toc.not_found",
+      `Chapters weren't found: no page has a contents heading (${TOC_HEADINGS.join(", ")}). ` +
+        "Add the book's contents page to its Markdown.",
+      {}
+    );
+    return [];
+  }
 
   for (const { raw, file } of toc.ignored) {
     diagnostics.info("toc.ignored_entry", `Contents line "${raw}" numbers a chapter out of sequence; ignored.`, { file });
@@ -215,11 +237,15 @@ export function buildOutlineByToc(pages, { diagnostics }) {
   }
   placed.sort((a, b) => a.start.pi - b.start.pi || a.start.ii - b.start.ii);
 
-  if (placed.filter((p) => p.entry.kind !== "matter").length < 2) {
-    diagnostics.info("toc.insufficient", `Contents page ${pages[toc.tocPageIndex].file} found but fewer than two chapters could be placed; using headings instead.`, {
-      file: pages[toc.tocPageIndex].file,
-    });
-    return null;
+  if (!placed.some((p) => p.entry.kind !== "matter")) {
+    diagnostics.error(
+      "toc.insufficient",
+      toc.entries.some((e) => e.kind !== "matter")
+        ? `Chapters weren't found: the contents in ${pages[toc.tocPageIndex].file} lists chapters, but none of them could be located in the pages.`
+        : `Chapters weren't found: the contents in ${pages[toc.tocPageIndex].file} has no chapter entries ("Chapter 3 …", "3 Title …", "Part …", "Appendix …").`,
+      { file: pages[toc.tocPageIndex].file }
+    );
+    return [];
   }
 
   const numbers = toc.entries.filter((e) => e.kind === "chapter").map((e) => Number(e.number)).filter(Number.isFinite);
@@ -275,7 +301,9 @@ function buildElements(pages, placed) {
 
     const k = placed.findIndex((p) => p.entry === entry);
     const role =
-      entry.kind === "matter" ? (k < firstChapterIndex ? "front_matter" : "back_matter") : entry.kind;
+      entry.kind === "matter"
+        ? (normalizeRole(entry.title.replace(/\s+/g, "-")) ?? (k < firstChapterIndex ? "front_matter" : "back_matter"))
+        : entry.kind;
     const title = entry.title || (entry.kind === "chapter" ? `Chapter ${entry.number}` : entry.raw);
     const el = element({ role, number: entry.number, title, slug: uniqueSlug(title) }, items, entry);
     if (role === "part") currentPart = el;
@@ -311,39 +339,17 @@ function element({ role, number, title, slug }, items, entry) {
     for (let n = 0; n < 2 && items[i]?.item.kind === "heading" && titleMatches(entry, items[i].item); n++) i++;
   }
 
-  // Inside a chapter, heading levels are as unreliable as everywhere else
-  // in converted pages, so they don't nest: every heading is a section at
-  // the chapter's top level - except dotted numbering ("1.1", "1.1.2"),
-  // which nests by its depth.
-  let current = body;
-  const numbered = []; // numbered[depth] = open section with that numbering depth
+  // Headings inside an element are content, not structure: each one stays
+  // in place as a subheading block (numbering kept in its text).
   for (; i < items.length; i++) {
-    const { item, file } = items[i];
+    const { item } = items[i];
     if (item.kind === "block") {
-      current.blocks.push(item);
+      body.blocks.push(item);
       continue;
     }
-    const depth = item.numbering?.includes(".") ? item.numbering.split(".").length : null;
-    let parent = null;
-    if (depth) {
-      for (let d = depth - 1; d >= 2 && !parent; d--) parent = numbered[d] ?? null;
-      numbered.length = depth;
-    }
-    const section = {
-      role: "section",
-      numbering: item.numbering,
-      title: item.title || "Untitled",
-      level: item.level,
-      depth: parent ? parent.depth + 1 : 2,
-      sort_order: 0,
-      source_file: file,
-      position: item.position,
-      blocks: [],
-      children: [],
-    };
-    (parent ? parent.children : el.sections).push(section);
-    if (depth) numbered[depth] = section;
-    current = section;
+    const text = item.numbering ? `${item.numbering} ${item.title}` : item.title;
+    if (!text) continue;
+    body.blocks.push({ kind: "block", block_type: "subheading", content: { text }, position: item.position });
   }
   return el;
 }

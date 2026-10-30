@@ -46,35 +46,45 @@ function apressBook() {
 
 test("chapters come from the contents page, not from heading levels", () => {
   const result = parseBookDirectory(pagesDir(apressBook()));
-  assert.equal(result.book.strategy, "toc");
   assert.deepEqual(outline(result), [
     ["front_matter", null, "Front Matter", "p1.md"],
-    ["front_matter", null, "Introduction", "p3.md"],
+    ["introduction", null, "Introduction", "p3.md"],
     ["chapter", "1", "Setting Up", "p4.md"],
     ["chapter", "2", "Understanding Node.js", "p6.md"],
-    ["back_matter", null, "Index", "p8.md"],
-    ["back_matter", null, "About the Author", "p9.md"],
+    ["index", null, "Index", "p8.md"],
+    ["about_author", null, "About the Author", "p9.md"],
   ]);
 });
 
-test("a chapter's pages, headings and content stay together; its title heading is consumed", () => {
+test("a chapter is one section: its title heading is consumed, other headings stay in place as subheadings", () => {
   const result = parseBookDirectory(pagesDir(apressBook()));
   const setUp = result.chapters.find((c) => c.title === "Setting Up");
-  const [body, listing, linux] = setUp.sections;
-  assert.deepEqual(body.blocks.map((b) => b.content.text), ["Install things."]);
-  assert.equal(listing.title, "Listing 1-1. hello.js", "a # heading inside a chapter is a section, not a chapter");
-  assert.equal(linux.title, "Installing on Linux");
-  assert.equal(linux.source_file, "book_page_0005.md", "the chapter continues onto the next page");
+  assert.equal(setUp.sections.length, 1);
+  const blocks = setUp.sections[0].blocks;
+  assert.deepEqual(blocks.map((b) => [b.block_type, b.content.text]), [
+    ["paragraph", "Install things."],
+    ["subheading", "Listing 1-1. hello.js"],
+    ["paragraph", "console.log(1)"],
+    ["subheading", "Installing on Linux"],
+    ["paragraph", "Use the package manager."],
+  ]);
+  assert.equal(blocks[3].position.file, "book_page_0005.md", "the chapter continues onto the next page");
 
   const two = result.chapters.find((c) => c.number === "2");
-  assert.deepEqual(two.sections.map((s) => s.title), ["Understanding Node.js", "Understanding Node.js Performance"]);
-  assert.equal(two.sections[1].blocks.at(-1).content.text, "More chapter two.");
+  assert.deepEqual(two.sections[0].blocks.map((b) => b.content.text), [
+    "Closures.",
+    "Understanding Node.js Performance",
+    "Fast.",
+    "More chapter two.",
+  ]);
 });
 
 test("the contents page itself, and pages before the first entry, are front matter", () => {
   const result = parseBookDirectory(pagesDir(apressBook()));
   const [front] = result.chapters;
-  assert.deepEqual(front.sections.map((s) => s.title), ["Front Matter", "Contents at a Glance"]);
+  assert.equal(front.sections.length, 1);
+  assert.deepEqual(front.sections[0].blocks.map((b) => b.block_type), ["paragraph", "subheading", "table"]);
+  assert.equal(front.sections[0].blocks[1].content.text, "Contents at a Glance");
 });
 
 test("an entry listed out of book order is placed at its own heading and reported", () => {
@@ -137,7 +147,9 @@ test("parts group their chapters; ordered-list contents keep their numbers", () 
   );
   assert.equal(byTitle("Structured Query Language").partId, byTitle("Basics").id);
   assert.equal(byTitle("Business Logic").partId, byTitle("Practice").id);
-  assert.equal(byTitle("Structured Query Language").sections[1].title, "Some of the Code", "sub-entries are sections, not chapters");
+  const sql = byTitle("Structured Query Language").sections;
+  assert.equal(sql.length, 1);
+  assert.ok(sql[0].blocks.some((b) => b.block_type === "subheading" && b.content.text === "1.1 Some of the Code"), "sub-entries stay as subheadings, not chapters or sections");
 });
 
 test("entries beyond the converted pages are reported as an incomplete conversion", () => {
@@ -151,12 +163,13 @@ test("entries beyond the converted pages are reported as an incomplete conversio
   assert.ok(result.diagnostics.some((d) => d.code === "toc.beyond_source" && d.message.includes("Missing")));
 });
 
-test("no contents page, or one whose chapters can't be placed, falls back to headings", () => {
+test("no contents page, or one whose chapters can't be placed, means chapters weren't found", () => {
   const plain = parseBookDirectory(pagesDir(["# One\n\nA.", "# Two\n\nB."]));
-  assert.equal(plain.book.strategy, "headings");
+  assert.deepEqual(plain.chapters, []);
+  assert.ok(codes(plain).includes("toc.not_found"));
 
   const unplaceable = parseBookDirectory(pagesDir(["# Contents\n\n**1 Alpha** 1\n\n**2 Beta** 2", "# One\n\nA."]));
-  assert.equal(unplaceable.book.strategy, "headings");
+  assert.deepEqual(unplaceable.chapters, []);
   assert.ok(codes(unplaceable).includes("toc.insufficient"));
 });
 

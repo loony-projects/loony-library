@@ -186,15 +186,13 @@ export interface CodeBlockRecord {
   followUpParagraphId: string | null;
 }
 
-/** Derived from the Markdown directory (see parseBookDirectory); empty-ish for parseBookMarkdown. */
+/** Derived from the Markdown directory (see parseBookDirectory), or given to parseBookPages. */
 export interface BookMetadata {
   slug?: string;
   title?: string;
   author?: string | null;
   /** Absolute path of the Markdown directory. */
   sourceDir?: string;
-  /** Structure strategy chosen from the directory's shape. */
-  strategy?: "toc" | "headings" | "numbering";
   [key: string]: unknown;
 }
 
@@ -214,7 +212,6 @@ export interface HeadingItem {
   level: number;
   numbering: string | null;
   title: string;
-  role: ElementRole | null;
   position?: SourcePosition;
 }
 export type ParsedItem = HeadingItem | (Omit<ContentBlock, "id"> & { id?: string });
@@ -226,12 +223,15 @@ export interface Diagnostics {
   info(code: string, message: string, where?: object): void;
 }
 
-/** Parses a book's Markdown directory (e.g. pdf-to-md output). Throws only if it isn't a directory. */
+/**
+ * Parses a book's Markdown directory (e.g. pdf-to-md output). Chapters come
+ * only from its contents page; without one, `chapters` is empty and
+ * `diagnostics` has a toc.not_found / toc.insufficient error. Throws only if
+ * it isn't a directory.
+ */
 export function parseBookDirectory(dir: string, overrides?: { title?: string; slug?: string; author?: string }): BookParseResult;
-export function parseBookMarkdown(
-  input: string | { file: string | null; source: string }[],
-  options?: { file?: string; metadata?: Record<string, unknown>; chapterLevel?: number }
-): BookParseResult;
+/** Same as parseBookDirectory, for Markdown pages already in memory (in reading order). */
+export function parseBookPages(pages: { file: string | null; source: string }[], metadata?: Record<string, unknown>): BookParseResult;
 export function slugify(text: string): string;
 export function analyzeCodeBlocks<R extends BookParseResult>(result: R, options?: { diagnostics?: ParseDiagnostic[] }): Promise<R>;
 export function parseFile(source: string, options?: { file?: string | null; diagnostics?: Diagnostics | null }): ParsedItem[];

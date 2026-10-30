@@ -1,14 +1,10 @@
-// Structural roles a book element can have, independent of its heading
-// level. A role is only ever assigned explicitly - by a `{.role}` class on a
-// heading (see headings.js), by a book config's `roles` map / per-entry
-// `role`, or by a strategy's own documented convention (the synthetic
-// "Front Matter" chapter) - never inferred from a heading that happens to
-// contain a similar word. An ordinary heading stays an ordinary chapter or
-// section.
+// Structural roles a book element can have. Roles come from the book's
+// contents page (buildOutlineByToc.js): its "Chapter N" / "Part N" /
+// "Appendix A" labels, or an unnumbered entry whose whole title names one
+// of these ("Preface", "Glossary", "About the Author", ...). Headings in the
+// pages never assign a role.
 //
-// division: which part of the book the role belongs to, used only to check
-// that front, main and back matter appear in that order (a diagnostic,
-// never a silent reorder).
+// division: which part of the book the role belongs to.
 export const ROLES = {
   // front matter
   front_matter: "front",
@@ -51,6 +47,8 @@ export const SECTION_ROLES = ["body", "section"];
 // Alternative spellings accepted in `{.role}` classes and config values.
 const ALIASES = {
   acknowledgements: "acknowledgments",
+  acknowledgement: "acknowledgments",
+  acknowledgment: "acknowledgments",
   contents: "toc",
   "table-of-contents": "toc",
   "half-title": "half_title",
@@ -70,8 +68,4 @@ export function normalizeRole(value) {
   const key = value.trim().toLowerCase();
   const role = ALIASES[key] ?? key.replace(/-/g, "_");
   return Object.hasOwn(ROLES, role) ? role : null;
-}
-
-export function divisionOf(role) {
-  return ROLES[role] ?? null;
 }

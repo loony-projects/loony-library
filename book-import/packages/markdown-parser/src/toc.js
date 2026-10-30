@@ -24,6 +24,7 @@ import { plainText } from "./text.js";
 //   any other bold/heading entry ("Preface", "Index") -> front/back matter
 // Plain, unnumbered, non-bold rows are sub-entries and ignored.
 
+export const TOC_HEADINGS = ["Contents", "Table of Contents", "Contents at a Glance", "Brief Contents", "Chapters"];
 export const TOC_HEADING_RE = /^(?:table of contents|contents(?: at a glance)?|brief contents|chapters)$/i;
 const MAX_EXTRA_PAGES = 40;
 

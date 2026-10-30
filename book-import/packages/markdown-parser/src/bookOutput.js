@@ -146,7 +146,7 @@ export function renderBookMarkdown(result) {
     book.sourceDir ? `- **Source:** \`${book.sourceDir}\`` : null,
     book.slug ? `- **Slug:** \`${book.slug}\`` : null,
     book.author ? `- **Author:** ${book.author}` : null,
-    book.strategy ? `- **Structure from:** ${book.strategy === "toc" ? "the book's contents page" : book.strategy === "numbering" ? "numbered chapter folders" : "heading levels"} (\`${book.strategy}\`)` : null,
+    `- **Chapters from:** the book's contents page`,
     `- **Parsed:** ${result.chapters.length} chapters, ${sections} sections, ${blocks} content blocks, ${result.codeBlocks.length} code blocks, ${result.glossary.length} glossary terms, ${result.symbols.length} symbols`,
   ].filter(Boolean);
 

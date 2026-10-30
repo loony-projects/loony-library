@@ -3,8 +3,8 @@ import { parseFenceInfo, getLanguage } from "./languages.js";
 import { hasAnalyzer } from "./analysis/registry.js";
 import { extractTermEntries } from "./extractTermList.js";
 
-// Stages 6b + 8 - turns a strategy's chapter/section tree into the public
-// outline shape shared by every strategy:
+// Stages 6b + 8 - turns the chapter/section tree into the public outline
+// shape:
 //
 // - ids: deterministic, positional, unique within the book -
 //     chapter "ch3", section "ch3.s0", block "ch3.s0.b4",
@@ -12,7 +12,7 @@ import { extractTermEntries } from "./extractTermList.js";
 //   Identical snippets at different places therefore never collide, and
 //   re-parsing unchanged source yields the same ids.
 // - sections are renumbered in pre-order per chapter (sort_order), which is
-//   the order every strategy already created them in.
+//   the order they were created in.
 // - codeBlocks: an index over every code block in the tree, top-level or
 //   nested in a list/blockquote/footnote/HTML wrapper, pointing back at its
 //   block (blockId), section (ownerId) and chapter (chapterId). The tree is

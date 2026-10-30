@@ -12,8 +12,10 @@ npm workspace of two packages:
 
 The input is a book's Markdown directory (e.g. pdf-to-md output:
 `<name>_page_NNNN.md`, `<name>_metadata.json`, `images/`). Chapters come
-from the book's own contents page when it has one; title, slug and
-structure are derived from the directory — see [../docs/migration.md](../docs/migration.md).
+only from the book's own contents page (a page headed "Contents", "Table of
+Contents", "Contents at a Glance", "Brief Contents" or "Chapters"); without
+one, dry-run and load stop with "Chapters weren't found". Title and slug
+are derived from the directory — see [../docs/migration.md](../docs/migration.md).
 
 ```sh
 npm install                                                   # installs both packages

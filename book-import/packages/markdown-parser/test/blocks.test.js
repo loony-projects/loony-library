@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseFile, parseBookMarkdown, parseHeadingText, astOf } from "../src/index.js";
+import { parseFile, parseBookPages, parseHeadingText, astOf } from "../src/index.js";
+import { oneChapterBook, bodyOf } from "./helpers.js";
 
 const blocks = (md) => parseFile(md).filter((i) => i.kind === "block");
 
@@ -72,8 +73,8 @@ test("heading numbering: dotted numbers may omit the space, a lone number glued 
 });
 
 test("code containing #, ##, backticks, links and arrows never becomes structure or glossary", () => {
-  const md = [
-    "# Glossary {.glossary}",
+  const glossaryPage = [
+    "# Glossary",
     "",
     "Real → entry",
     "",
@@ -87,18 +88,27 @@ test("code containing #, ##, backticks, links and arrows never becomes structure
     "    ## indented code, also not a heading",
     "    TERM → not an entry",
   ].join("\n");
-  const result = parseBookMarkdown(md);
-  assert.equal(result.chapters.length, 1);
-  assert.equal(result.chapters[0].sections.length, 1);
-  assert.deepEqual(result.chapters[0].sections[0].blocks.map((b) => b.block_type), ["paragraph", "code", "code"]);
+  const result = parseBookPages([
+    { file: "contents.md", source: "# Contents\n\n**1 Basics** 1\n\n**Glossary** 2\n" },
+    { file: "basics.md", source: "# Basics\n\nText.\n" },
+    { file: "glossary.md", source: glossaryPage },
+  ]);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.title]), [
+    ["front_matter", "Front Matter"],
+    ["chapter", "Basics"],
+    ["glossary", "Glossary"],
+  ]);
+  const glossary = result.chapters[2];
+  assert.equal(glossary.sections.length, 1);
+  assert.deepEqual(glossary.sections[0].blocks.map((b) => b.block_type), ["paragraph", "code", "code"]);
   assert.deepEqual(result.glossary.map((g) => g.term), ["Real"]);
   assert.equal(result.codeBlocks[0].rawCode, "# Not a chapter\n## Not a section\n```\n[link](http://x) and API → nope");
 });
 
 test("every block records file and position", () => {
-  const result = parseBookMarkdown("# A\n\ntext\n\n```go\npackage main\n```\n", { file: "a.md" });
-  const [text, code] = result.chapters[0].sections[0].blocks;
-  assert.deepEqual(text.position.start, { line: 3, column: 1, offset: 5 });
+  const result = oneChapterBook("text\n\n```go\npackage main\n```\n", { file: "a.md" });
+  const [text, code] = bodyOf(result).blocks;
+  assert.deepEqual(text.position.start, { line: 3, column: 1, offset: 16 });
   assert.equal(code.position.file, "a.md");
   assert.equal(code.position.start.line, 5);
   assert.equal(code.position.end.line, 7);

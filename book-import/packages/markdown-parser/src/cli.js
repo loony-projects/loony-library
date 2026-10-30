@@ -23,8 +23,14 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const outline = parseBookDirectory(bookDirFromEnv(), args.overrides);
+  console.log(`${outline.book.title} (${outline.book.slug}) from ${outline.book.sourceDir}`);
+  if (!outline.chapters.length) {
+    // No contents page (or none of its chapters could be located): report
+    // that instead of writing an empty outline.
+    printDiagnostics(outline.diagnostics.filter((d) => d.severity === "error"), { all: true });
+    throw new UsageError("Chapters weren't found, so nothing was written. See the error above.");
+  }
   if (args.analyze) await analyzeCodeBlocks(outline);
-  console.log(`${outline.book.title} (${outline.book.slug}) from ${outline.book.sourceDir} [${outline.book.strategy}]`);
   console.log(summarize(outline));
   printDiagnostics(outline.diagnostics, { all: args.allDiagnostics });
   fs.writeFileSync(args.out, renderBookMarkdown(outline));

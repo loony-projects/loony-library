@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  parseBookMarkdown,
+  parseBookPages,
   analyzeCodeBlocks,
   normalizeLanguage,
   parseFenceInfo,
@@ -9,6 +9,7 @@ import {
   registerAnalyzer,
   unregisterAnalyzer,
 } from "../src/index.js";
+import { oneChapterBook, chapterOf, bodyOf } from "./helpers.js";
 
 const fence = (lang, code, meta = "") => `\`\`\`${lang}${meta ? ` ${meta}` : ""}\n${code}\n\`\`\``;
 
@@ -23,8 +24,6 @@ const SAMPLES = {
 
 function book() {
   return [
-    "# Code",
-    "",
     "JavaScript example:",
     "",
     fence("js", SAMPLES.javascript, 'title="read.js"'),
@@ -46,7 +45,7 @@ function book() {
 const decl = (analysis) => analysis.declarations.map((d) => `${d.kind}:${d.name}:${d.exported}`);
 
 test("fenced code in JS, C++, C, Go, Rust and Java is collected, normalized and syntax-analysed", async () => {
-  const result = parseBookMarkdown(book(), { file: "code.md" });
+  const result = oneChapterBook(book(), { file: "code.md", title: "Code" });
   assert.deepEqual(
     result.codeBlocks.map((c) => [c.originalLanguage, c.normalizedLanguage, c.recognizedLanguage, c.syntaxAnalysisSupported, c.analysisStatus]),
     [
@@ -92,13 +91,13 @@ test("fenced code in JS, C++, C, Go, Rust and Java is collected, normalized and 
 });
 
 test("fence metadata, lead-in/follow-up paragraphs and exact raw code", () => {
-  const result = parseBookMarkdown(book());
+  const result = oneChapterBook(book(), { title: "Code" });
   const [js, , , , rust] = result.codeBlocks;
   assert.equal(js.fenceMeta, 'title="read.js"');
   assert.equal(js.languageLabel, "js");
   assert.equal(js.rawCode, SAMPLES.javascript);
   assert.equal(js.fenced, true);
-  const blocks = result.chapters[0].sections[0].blocks;
+  const blocks = bodyOf(result).blocks;
   assert.equal(blocks.find((b) => b.id === js.leadInParagraphId).content.text, "JavaScript example:");
   assert.equal(js.followUpParagraphId, null, "next block is code, not a paragraph");
   assert.equal(blocks.find((b) => b.id === rust.followUpParagraphId).content.text, "That was Rust.");
@@ -119,7 +118,7 @@ test("aliases, attributes, unlabelled fences and unknown languages", async () =>
   assert.deepEqual(parseFenceInfo("language-go", 'hl_lines="2"'), { label: "go", attributes: [], meta: 'hl_lines="2"' });
 
   const md = ["```", "plain", "```", "", "```brainfuck", "+++.", "```", "", "```rust,editable", "fn main() {}", "```", "", "```tsx", "export const App = () => <div/>;", "```"].join("\n");
-  const result = parseBookMarkdown(md);
+  const result = oneChapterBook(md);
   const [plain, bf, rust, tsx] = result.codeBlocks;
   assert.deepEqual([plain.originalLanguage, plain.normalizedLanguage, plain.recognizedLanguage], [null, null, false]);
   assert.deepEqual([bf.originalLanguage, bf.normalizedLanguage, bf.recognizedLanguage], ["brainfuck", null, false]);
@@ -136,7 +135,7 @@ test("aliases, attributes, unlabelled fences and unknown languages", async () =>
 });
 
 test("recognized languages without an analyzer are reported as unsupported, not analysed", async () => {
-  const result = parseBookMarkdown("```kotlin\nfun main() {}\n```\n\n```sql\nselect 1;\n```");
+  const result = oneChapterBook("```kotlin\nfun main() {}\n```\n\n```sql\nselect 1;\n```");
   assert.deepEqual(result.codeBlocks.map((c) => [c.recognizedLanguage, c.syntaxAnalysisSupported]), [[true, false], [true, false]]);
   await analyzeCodeBlocks(result);
   assert.deepEqual(result.codeBlocks.map((c) => c.analysisStatus), ["unsupported", "unsupported"]);
@@ -144,7 +143,7 @@ test("recognized languages without an analyzer are reported as unsupported, not 
 });
 
 test("indented code blocks are collected with exact text", () => {
-  const result = parseBookMarkdown("# A\n\nIntro:\n\n    fn main() {\n        println!(\"x\");\n    }\n");
+  const result = oneChapterBook("Intro:\n\n    fn main() {\n        println!(\"x\");\n    }\n");
   const [code] = result.codeBlocks;
   assert.equal(code.fenced, false);
   assert.equal(code.rawCode, 'fn main() {\n    println!("x");\n}');
@@ -153,7 +152,6 @@ test("indented code blocks are collected with exact text", () => {
 
 test("code nested in lists and blockquotes is indexed with its owner and a distinct id", () => {
   const md = [
-    "# A",
     "## Nested",
     "- step",
     "",
@@ -165,29 +163,35 @@ test("code nested in lists and blockquotes is indexed with its owner and a disti
     "> package main",
     "> ```",
   ].join("\n");
-  const result = parseBookMarkdown(md, { file: "n.md" });
-  const section = result.chapters[0].sections[1];
+  const result = oneChapterBook(md, { file: "n.md" });
+  const section = bodyOf(result);
+  const [subheading, list, quote] = section.blocks;
+  assert.deepEqual([subheading.block_type, subheading.content.text], ["subheading", "Nested"], "a heading is content, not a section");
   const [c, go] = result.codeBlocks;
   assert.equal(c.nested, true);
-  assert.equal(c.blockId, section.blocks[0].id);
-  assert.equal(c.id, `${section.blocks[0].id}.code0`);
+  assert.equal(c.blockId, list.id);
+  assert.equal(c.id, `${list.id}.code0`);
   assert.equal(c.ownerId, section.id);
   assert.equal(c.rawCode, "int x;");
-  assert.equal(c.position.start.line, 5);
-  assert.equal(go.blockId, section.blocks[1].id);
+  assert.equal(c.position.start.line, 6);
+  assert.equal(go.blockId, quote.id);
   assert.equal(go.normalizedLanguage, "go");
-  assert.equal(section.blocks[0].nestedCode, undefined, "the index is the one representation of nested code");
+  assert.equal(list.nestedCode, undefined, "the index is the one representation of nested code");
 });
 
 test("the same snippet twice gets distinct ids and the right owners", () => {
   const snippet = fence("rust", "let x = 1;");
-  const result = parseBookMarkdown(`# One\n\n${snippet}\n\n# Two\n\n## Sub\n\n${snippet}\n`);
+  const result = parseBookPages([
+    { file: "contents.md", source: "# Contents\n\n**1 One** 1\n\n**2 Two** 2\n" },
+    { file: "one.md", source: `# One\n\n${snippet}\n` },
+    { file: "two.md", source: `# Two\n\n## Sub\n\n${snippet}\n` },
+  ]);
   const [first, second] = result.codeBlocks;
   assert.equal(first.rawCode, second.rawCode);
   assert.notEqual(first.id, second.id);
-  assert.equal(first.chapterId, result.chapters[0].id);
-  assert.equal(second.chapterId, result.chapters[1].id);
-  assert.equal(second.ownerId, result.chapters[1].sections[1].id);
+  assert.equal(first.chapterId, chapterOf(result, 1).id);
+  assert.equal(second.chapterId, chapterOf(result, 2).id);
+  assert.equal(second.ownerId, bodyOf(result, 2).id);
 });
 
 test("incomplete snippets report parse_error with partial facts and never fail the book", async () => {
@@ -200,7 +204,7 @@ test("incomplete snippets report parse_error with partial facts and never fail t
     "",
     fence("go", "x := 5\nfmt.Println(x)"),
   ].join("\n");
-  const result = parseBookMarkdown(md, { file: "f.md" });
+  const result = oneChapterBook(md, { file: "f.md" });
   await analyzeCodeBlocks(result);
   const [rust, c, java, go] = result.codeBlocks;
 
@@ -235,7 +239,7 @@ test("analyzer failures are diagnostics, not exceptions; the registry is extensi
     },
   });
   try {
-    const result = parseBookMarkdown("```zig\nconst x = 1;\n```\n\n```rust\nfn main() {}\n```");
+    const result = oneChapterBook("```zig\nconst x = 1;\n```\n\n```rust\nfn main() {}\n```");
     assert.equal(result.codeBlocks[0].syntaxAnalysisSupported, true);
     await analyzeCodeBlocks(result);
     assert.equal(result.codeBlocks[0].analysisStatus, "unanalysed");
@@ -248,7 +252,7 @@ test("analyzer failures are diagnostics, not exceptions; the registry is extensi
 });
 
 test("an unclosed fence is reported", () => {
-  const result = parseBookMarkdown("# A\n\n```js\nconst x = 1;\n", { file: "u.md" });
+  const result = oneChapterBook("```js\nconst x = 1;\n", { file: "u.md" });
   const d = result.diagnostics.find((x) => x.code === "code.unclosed_fence");
   assert.deepEqual([d.file, d.line], ["u.md", 3]);
   assert.equal(result.codeBlocks[0].rawCode, "const x = 1;");
@@ -256,7 +260,7 @@ test("an unclosed fence is reported", () => {
 
 test("parsing never executes code", async () => {
   globalThis.__executed = false;
-  const result = parseBookMarkdown(fence("js", "globalThis.__executed = true;"));
+  const result = oneChapterBook(fence("js", "globalThis.__executed = true;"));
   await analyzeCodeBlocks(result);
   assert.equal(globalThis.__executed, false);
   delete globalThis.__executed;

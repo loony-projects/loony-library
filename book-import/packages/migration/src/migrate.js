@@ -215,7 +215,7 @@ async function main() {
   }
   const data = parseBookDirectory(bookDirFromEnv(), args.overrides);
   data.book.category = args.category;
-  console.log(`${data.book.title} (${data.book.slug}) from ${data.book.sourceDir} [${data.book.strategy}]`);
+  console.log(`${data.book.title} (${data.book.slug}) from ${data.book.sourceDir}`);
   console.log(summarize(data));
   printDiagnostics(data.diagnostics);
   // Warnings and info are authoring issues the outline already works
