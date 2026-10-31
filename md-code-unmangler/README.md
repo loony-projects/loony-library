@@ -75,6 +75,7 @@ node ./index.cjs --list-profiles
 | `--profile NAME` | The Rust profile to use with `--lang rust`. If omitted, it is auto-detected. |
 | `--list-profiles` | List the Rust profiles and exit. |
 | `--dry-run` | Process everything and report which files would change, without writing anything. |
+| `-v`, `--verbose` | List every item to review and, with `--dry-run`, every file that would change (otherwise long lists are shortened). |
 | `--config FILE` | Read defaults from this file instead of `cleaner/.env` (see [Configuration](#configuration)). |
 | `[input] [output]` | The input and output folders given positionally. This is an alternative to `--path`/`--out`, but you can't use both forms for the same folder. |
 | `-h`, `--help` | Show usage. |
@@ -146,23 +147,31 @@ cp cleaner/.env.example cleaner/.env
 - The original line endings (LF or CRLF) are kept.
 - With `--dry-run`, nothing is written and the output folder is not created.
 
-Example output:
+Example output (on a terminal it's in colour; `NO_COLOR=1` turns colour off, `FORCE_COLOR=1` keeps it when piping):
 
 ```text
-Processed 299 Markdown files from .../markdown into .../markdown-cleaned
-Cleaned 196 of 299 Markdown files.
-Formatted 297 of 390 Python blocks.
-Left 17 blocks unchanged:
-  Build-LLM_page_0065.md:3 (looks like program output)
-  ...
-Indentation of flattened code is reconstructed heuristically; review the result.
+md-code-unmangler  clean → format
+
+  from  ~/Books/Programming_Languages/AI_ML_LLM/NLP-with-Transformer-Models/markdown
+  to    ~/Books/Programming_Languages/AI_ML_LLM/NLP-with-Transformer-Models/markdown-cleaned
+  467 Markdown files  ·  45 other files copied as is  ·  840 ms
+
+  Python
+    ✔ cleaned    247 / 467 Markdown files   ███████████░░░░░░░░░  53%
+    ✔ formatted  449 / 494 Python blocks    ██████████████████░░  91%
+    ● 2 blocks left unchanged
+      looks like program output (2)
+        04_Transformer_Anatomy/02_The_Encoder/NLP-with-Transformer-Models_page_0090.md:15
+        04_Transformer_Anatomy/03_The_Decoder/NLP-with-Transformer-Models_page_0101.md:1
+
+  ⚠ Python indentation of flattened code is reconstructed heuristically. Review the result.
+
+  ✔ Done: 248 of 467 Markdown files changed → ~/Books/…/NLP-with-Transformer-Models/markdown-cleaned
 ```
 
-```text
-Auto-detected Rust profile: keyword-density (keyword-density=13, bold-keywords=0, bold-plain-comments=0)
-Processed 577 Markdown files from .../comprehensive-rust-google/markdown into .../markdown-cleaned
-Converted 13 Rust code paragraphs in 13 files (profile: keyword-density).
-```
+- Items to review are grouped by reason, with their file and line. Each reason lists up to 10; `--verbose` lists all.
+- With `--dry-run`, the files that would change are counted per top-level folder (`--verbose` lists each one).
+- With `--lang rust`, the Rust section also says which profile was used and, when it was auto-detected, how many paragraphs each profile matched.
 
 ## How each step works
 

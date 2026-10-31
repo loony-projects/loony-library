@@ -20,6 +20,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { loadEnvFile } = require('./env');
+const { colorEnabled, makeStyle, SYMBOLS, tilde, bar, percent, duration, plural, padEnd, visibleLength } = require('./ui.cjs');
 
 // Each language's modules are loaded only when one of its steps runs, so
 // `--lang rust` loads only ./rust, `--lang js` only ./js, and so on.
@@ -50,6 +51,7 @@ Options:
   --profile NAME       Rust profile for --lang rust instead of auto-detecting (see --list-profiles)
   --list-profiles      List the Rust profiles and exit
   --dry-run            Report what would change without writing anything
+  -v, --verbose        List every file to review or change (otherwise lists are shortened)
   --config FILE        Read defaults from this .env-style FILE instead of cleaner/.env
 Folders may also be given positionally: [input] [output].
 Environment variables (a flag wins over them, and they win over the .env file):
@@ -82,9 +84,14 @@ const STEPS = {
       const result = rust().convertMarkdown(text, options.rustProfile);
       return { text: result.text, changed: result.converted, items: result.changed ? 1 : 0, skipped: [] };
     },
-    report: (t, options) => [options.rustProfile
-      ? `Converted ${t.changed} Rust code paragraphs in ${t.items} files (profile: ${options.rustProfile.name}).`
-      : 'Rust: no code paragraphs matched any profile; nothing converted.'],
+    report: (t, options) => (options.rustProfile
+      ? {
+        group: 'Rust',
+        stats: [{ verb: 'converted', done: t.changed, unit: 'code paragraphs', extra: `in ${plural(t.items, 'file')}` }],
+        facts: rustProfileFacts(options),
+        note: 'Rust comment boundaries in flattened code are guessed.',
+      }
+      : { group: 'Rust', warnings: ['No code paragraph matched any Rust profile; nothing converted.'] }),
   },
   js: {
     run(text, options) {
@@ -97,10 +104,16 @@ const STEPS = {
     },
     report: t => {
       const { fenced = 0, ...byKind } = t.counts;
-      const kinds = Object.entries(byKind).map(([kind, n]) => `${n} ${kind}`).join(', ');
-      return [`Fenced ${fenced} code paragraphs${kinds ? ` (${kinds})` : ''}; reformatted ${t.changed} of ${t.items} existing code blocks.`,
-        ...(t.skipped.length ? [`Review ${t.skipped.length} blocks:\n  ${t.skipped.join('\n  ')}`] : []),
-        'Statement breaks and comment ends in flattened code are reconstructed heuristically; review the result.'];
+      const kinds = Object.entries(byKind).filter(([, n]) => n).map(([kind, n]) => `${n} ${kind}`).join(', ');
+      return {
+        group: 'JavaScript',
+        stats: [
+          { verb: 'fenced', done: fenced, unit: 'code paragraphs', extra: kinds && `(${kinds})` },
+          { verb: 'formatted', done: t.changed, total: t.items, unit: 'code blocks' },
+        ],
+        review: { noun: 'block', title: 'to review', items: t.skipped },
+        note: 'JavaScript statement breaks and comment ends in flattened code are guessed.',
+      };
     },
   },
   java: {
@@ -108,9 +121,12 @@ const STEPS = {
       const result = java().formatJavaMarkdown(text, options.width ?? 80);
       return { text: result.text, changed: result.fenced, items: 0, skipped: result.skipped };
     },
-    report: t => [`Fenced ${t.changed} Java paragraphs.`,
-      ...(t.skipped.length ? [`Review ${t.skipped.length} paragraphs:\n  ${t.skipped.join('\n  ')}`] : []),
-      'Where flattened // comments end is guessed; review the result.'],
+    report: t => ({
+      group: 'Java',
+      stats: [{ verb: 'fenced', done: t.changed, unit: 'code paragraphs' }],
+      review: { noun: 'paragraph', title: 'to review', items: t.skipped },
+      note: 'Where flattened Java // comments end is guessed.',
+    }),
   },
   sql: {
     run(text, options) {
@@ -118,48 +134,56 @@ const STEPS = {
       return { text: result.text, changed: result.fenced, items: result.sessions, skipped: result.skipped,
         counts: { removed: result.removed } };
     },
-    report: t => [`Fenced ${t.changed} SQL paragraphs and removed ${t.counts.removed || 0} listing line numbers from them.`,
-      ...(t.items ? [`Left ${t.items} psql sessions (queries mixed with their output) as they were.`] : []),
-      ...(t.skipped.length ? [`Review ${t.skipped.length} paragraphs:\n  ${t.skipped.join('\n  ')}`] : []),
-      'Listing line numbers and statement layout are reconstructed heuristically; review the result.'],
+    report: t => ({
+      group: 'SQL',
+      stats: [{ verb: 'fenced', done: t.changed, unit: 'code paragraphs', extra: `${plural(t.counts.removed || 0, 'listing line number')} removed` }],
+      facts: t.items ? [`${plural(t.items, 'psql session')} (queries mixed with their output) left as they were`] : [],
+      review: { noun: 'paragraph', title: 'to review', items: t.skipped },
+      note: 'SQL listing line numbers and statement layout are reconstructed heuristically.',
+    }),
   },
   clean: {
     run(text) {
       const cleaned = pyClean().cleanMarkdown(text);
       return { text: cleaned, changed: cleaned !== text ? 1 : 0, items: 1, skipped: [] };
     },
-    report: t => [`Cleaned ${t.changed} of ${t.items} Markdown files.`],
+    report: t => ({ group: 'Python', stats: [{ verb: 'cleaned', done: t.changed, total: t.items, unit: 'Markdown files' }] }),
   },
   format: {
     run(text, options) {
       const result = pyFormat().formatMarkdown(text, options.width ?? 88);
       return { text: result.text, changed: result.changed, items: result.blocks, skipped: result.skipped };
     },
-    report: t => [
-      `Formatted ${t.changed} of ${t.items} Python blocks.`,
-      ...(t.skipped.length ? [`Left ${t.skipped.length} blocks unchanged:\n  ${t.skipped.join('\n  ')}`] : []),
-      'Indentation of flattened code is reconstructed heuristically; review the result.'],
+    report: t => ({
+      group: 'Python',
+      stats: [{ verb: 'formatted', done: t.changed, total: t.items, unit: 'Python blocks' }],
+      review: { noun: 'block', title: 'left unchanged', items: t.skipped },
+      note: 'Python indentation of flattened code is reconstructed heuristically.',
+    }),
   },
 };
 
 // Use the given Rust profile, or pick the one matching the most paragraphs.
 function chooseRustProfile(name, contents) {
   const { getProfile, detectProfile } = rust();
-  if (name) return getProfile(name);
-  let detection;
+  if (name) return { profile: getProfile(name), detection: null };
   try {
-    detection = detectProfile(contents);
+    const detection = detectProfile(contents);
+    return { profile: detection.profile, detection };
   } catch {
-    return null; // No paragraph matched any profile.
+    return { profile: null, detection: null }; // No paragraph matched any profile.
   }
-  const summary = detection.scores.map(s => `${s.profile.name}=${s.count}`).join(', ');
-  console.log(`Auto-detected Rust profile: ${detection.profile.name} (${summary})`);
+}
+
+function rustProfileFacts(options) {
+  const { rustProfile: profile, rustDetection: detection } = options;
+  if (!detection) return [`profile ${profile.name} (chosen with --profile)`];
+  const scores = detection.scores.map(s => `${s.profile.name} ${s.count}`).join(', ');
+  const facts = [`profile ${profile.name}, auto-detected (paragraphs matched: ${scores})`];
   if (detection.tieBreak) {
-    const ties = detection.tieBreak.map(t => `${t.profile.name}=${t.score}`).join(', ');
-    console.log(`Tied on match count; broke the tie by comment style (${ties})`);
+    facts.push(`tied on matches; comment style decided (${detection.tieBreak.map(t => `${t.profile.name} ${t.score}`).join(', ')})`);
   }
-  if (!detection.confident) console.log('Warning: detection was not clear-cut; pass --profile to be explicit.');
-  return detection.profile;
+  return facts;
 }
 
 async function listFiles(root, relative = '') {
@@ -175,6 +199,7 @@ async function listFiles(root, relative = '') {
 // Copy input to output, passing each .md file through every step in order and
 // copying everything else unchanged. Only the final text is written.
 async function processDirectory(stepNames, inputDir, outputDir, options = {}) {
+  const started = Date.now();
   const steps = STEP_ORDER.filter(name => stepNames.includes(name));
   const input = await fs.realpath(path.resolve(inputDir)).catch(() => null);
   if (!input || !(await fs.stat(input)).isDirectory()) {
@@ -198,7 +223,11 @@ async function processDirectory(stepNames, inputDir, outputDir, options = {}) {
   const contents = new Map();
   for (const rel of markdown) contents.set(rel, await fs.readFile(path.join(input, rel), 'utf8'));
   const runOptions = { ...options };
-  if (steps.includes('rust')) runOptions.rustProfile = chooseRustProfile(options.profile, [...contents.values()]);
+  if (steps.includes('rust')) {
+    const chosen = chooseRustProfile(options.profile, [...contents.values()]);
+    runOptions.rustProfile = chosen.profile;
+    runOptions.rustDetection = chosen.detection;
+  }
 
   const totals = Object.fromEntries(steps.map(name => [name, { items: 0, changed: 0, skipped: [], counts: {} }]));
   const changedFiles = [];
@@ -215,20 +244,94 @@ async function processDirectory(stepNames, inputDir, outputDir, options = {}) {
       text = result.text;
       totals[name].items += result.items;
       totals[name].changed += result.changed;
-      totals[name].skipped.push(...result.skipped.map(s => `${rel}:${s.line} (${s.reason})`));
+      totals[name].skipped.push(...result.skipped.map(s => ({ file: rel, line: s.line, reason: s.reason })));
       for (const [kind, n] of Object.entries(result.counts || {})) totals[name].counts[kind] = (totals[name].counts[kind] || 0) + n;
     }
     if (text !== contents.get(rel)) changedFiles.push(rel);
     if (!options.dryRun) await fs.writeFile(target, text);
   }
 
-  if (options.dryRun) {
-    console.log(`Dry run: ${changedFiles.length} of ${markdown.length} Markdown files in ${input} would change`
-      + ` (output would go to ${output}).`);
-    for (const rel of changedFiles) console.log(`  ${rel}`);
-  } else console.log(`Processed ${markdown.length} Markdown files from ${input} into ${output}`);
-  for (const name of steps) console.log(STEPS[name].report(totals[name], runOptions).join('\n'));
+  const log = options.log || console.log;
+  printReport({
+    steps, input, output, changedFiles, dryRun: Boolean(options.dryRun), verbose: Boolean(options.verbose),
+    markdownCount: markdown.length, otherCount: files.length - markdown.length, ms: Date.now() - started,
+    reports: steps.map(name => STEPS[name].report(totals[name], runOptions)),
+  }, log, makeStyle(options.color ?? colorEnabled()));
   return { files: markdown.length, changedFiles, totals };
+}
+
+const REVIEW_LIMIT = 10;
+
+// The run's summary: header, a section per language with aligned stats and
+// bars, review items grouped by reason, the caveats, and a closing line.
+function printReport(run, log, s) {
+  const { reports, input, output, changedFiles, markdownCount, otherCount, dryRun, verbose, ms } = run;
+  const out = [];
+  const groups = [...new Set(reports.map(r => r.group))];
+  out.push('', `${s.bold(s.cyan('md-code-unmangler'))}  ${s.dim(run.steps.join(` ${SYMBOLS.arrow} `))}${dryRun ? `  ${s.yellow('dry run · nothing written')}` : ''}`, '');
+  out.push(`  ${s.dim('from')}  ${tilde(input)}`);
+  out.push(`  ${s.dim('to  ')}  ${tilde(output)}${dryRun ? s.dim('  (not created)') : ''}`);
+  const scope = [plural(markdownCount, 'Markdown file'), otherCount ? `${plural(otherCount, 'other file')} copied as is` : null, duration(ms)];
+  out.push(`  ${s.dim(scope.filter(Boolean).join(`  ${SYMBOLS.dot}  `))}`);
+
+  for (const group of groups) {
+    const parts = reports.filter(r => r.group === group);
+    out.push('', `  ${s.bold(group)}`);
+    const rows = parts.flatMap(r => r.stats || []).map(stat => {
+      const amount = `${s.bold(stat.done)}${stat.total !== undefined ? s.dim(` / ${stat.total}`) : ''}`;
+      // Units are written in the plural; one of something reads singular.
+      const unit = stat.done === 1 && stat.total === undefined ? stat.unit.replace(/s$/, '') : stat.unit;
+      return { left: `${s.green(SYMBOLS.ok)} ${stat.verb.padEnd(10)} ${amount} ${unit}${stat.extra ? ` ${s.dim(stat.extra)}` : ''}`, stat };
+    });
+    const width = Math.max(0, ...rows.map(r => visibleLength(r.left)));
+    for (const { left, stat } of rows) {
+      const progress = stat.total ? `   ${s.green(bar(stat.done, stat.total))} ${s.dim(percent(stat.done, stat.total).padStart(4))}` : '';
+      out.push(`    ${padEnd(left, width)}${progress}`);
+    }
+    for (const part of parts) {
+      for (const fact of part.facts || []) out.push(`    ${s.blue(SYMBOLS.info)} ${s.dim(fact)}`);
+      for (const warning of part.warnings || []) out.push(`    ${s.yellow(SYMBOLS.warn)} ${warning}`);
+      const items = part.review?.items || [];
+      if (!items.length) continue;
+      out.push(`    ${s.yellow(SYMBOLS.info)} ${plural(items.length, part.review.noun)} ${part.review.title}`);
+      const byReason = new Map();
+      for (const item of items) byReason.set(item.reason, [...(byReason.get(item.reason) || []), item]);
+      for (const [reason, list] of byReason) {
+        out.push(`      ${s.yellow(reason)} ${s.dim(`(${list.length})`)}`);
+        for (const item of verbose ? list : list.slice(0, REVIEW_LIMIT)) {
+          const dir = path.dirname(item.file);
+          out.push(`        ${dir === '.' ? '' : s.dim(dir + path.sep)}${path.basename(item.file)}${s.cyan(`:${item.line}`)}`);
+        }
+        if (!verbose && list.length > REVIEW_LIMIT) out.push(`        ${s.dim(`… and ${list.length - REVIEW_LIMIT} more (--verbose lists all)`)}`);
+      }
+    }
+  }
+
+  if (dryRun && changedFiles.length) {
+    out.push('', `  ${s.bold('Would change')}`);
+    if (verbose) for (const rel of changedFiles) out.push(`    ${s.dim(path.dirname(rel) + path.sep)}${path.basename(rel)}`);
+    else {
+      const byFolder = new Map();
+      for (const rel of changedFiles) {
+        const top = rel.includes(path.sep) ? rel.split(path.sep)[0] + path.sep : '(top level)';
+        byFolder.set(top, (byFolder.get(top) || 0) + 1);
+      }
+      const nameWidth = Math.max(...[...byFolder.keys()].map(k => k.length));
+      for (const [folder, n] of byFolder) out.push(`    ${folder.padEnd(nameWidth)}  ${s.dim(plural(n, 'file'))}`);
+      out.push(`    ${s.dim('(--verbose lists every file)')}`);
+    }
+  }
+
+  const notes = [...new Set(reports.map(r => r.note).filter(Boolean))];
+  if (notes.length) {
+    out.push('');
+    for (const note of notes) out.push(`  ${s.yellow(SYMBOLS.warn)} ${s.dim(`${note} Review the result.`)}`);
+  }
+  const changed = changedFiles.length;
+  out.push('', dryRun
+    ? `  ${s.yellow(SYMBOLS.info)} ${s.bold(`Dry run: ${changed} of ${plural(markdownCount, 'Markdown file')} would change`)}`
+    : `  ${s.green(SYMBOLS.ok)} ${s.bold(`Done: ${changed} of ${plural(markdownCount, 'Markdown file')} changed`)} ${s.dim(`${SYMBOLS.arrow} ${tilde(output)}`)}`, '');
+  log(out.join('\n'));
 }
 
 // Folders are always found from $HOME: `~` and `$HOME` are expanded, and a
@@ -271,6 +374,7 @@ async function main() {
     const option = args[a].match(/^--(lang|width|path|out|profile|config)(?:=(.*))?$/);
     if (['--clean', '--format'].includes(args[a])) flags.add(args[a].slice(2));
     else if (args[a] === '--dry-run') options.dryRun = true;
+    else if (args[a] === '--verbose' || args[a] === '-v') options.verbose = true;
     else if (option) {
       const value = option[2] ?? args[++a];
       if (!value || value.startsWith('--')) throw new Error(`--${option[1]} needs a value.\n\n${USAGE}`);
@@ -303,7 +407,7 @@ async function main() {
   const outFolder = options.out || positional[1] || defaults.out;
   const output = outFolder ? resolveFolder(outFolder) : defaultOutput(input, fromRaw);
   await processDirectory([...flags], input, output, {
-    width: width === undefined ? undefined : Number(width), profile, dryRun: options.dryRun,
+    width: width === undefined ? undefined : Number(width), profile, dryRun: options.dryRun, verbose: options.verbose,
   });
 }
 
@@ -316,4 +420,10 @@ function defaultOutput(input, fromRaw) {
 }
 
 module.exports = { processDirectory, resolveFolder, STEPS };
-if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
+if (require.main === module) {
+  main().catch(error => {
+    const s = makeStyle(colorEnabled(process.stderr));
+    console.error(`${s.red(SYMBOLS.error)} ${s.bold(error.message.split('\n')[0])}${error.message.includes('\n') ? `\n${error.message.split('\n').slice(1).join('\n')}` : ''}`);
+    process.exitCode = 1;
+  });
+}
