@@ -29,37 +29,37 @@ Without `--path` (or `CLEANER_PATH`), these read `~/markdown/`. Folders are alwa
 
 ```bash
 # Python book: clean and format in one pass
-node ./cleaner/index.cjs --lang py
+node ./index.cjs --lang py
 
 # Rust book: reflow Rust listings (the profile is auto-detected)
-node ./cleaner/index.cjs --lang rust
+node ./index.cjs --lang rust
 
 # Node.js book: fence and format JavaScript, JSON, HTML and shell sessions
-node ./cleaner/index.cjs --lang js --path ~/.output/NodeJs/Beginning_Nodejs/markdown
+node ./index.cjs --lang js --path ~/.output/NodeJs/Beginning_Nodejs/markdown
 
 # Java book: fence and format Java listings
-node ./cleaner/index.cjs --lang java --path ~/.output/Java/Java-Ninth-Edition/markdown
+node ./index.cjs --lang java --path ~/.output/Java/Java-Ninth-Edition/markdown
 
 # PostgreSQL book: fence and format SQL, removing the listing line numbers
-node ./cleaner/index.cjs --lang sql --path ~/.output/Database/the-art-of-postgresql/markdown
+node ./index.cjs --lang sql --path ~/.output/Database/the-art-of-postgresql/markdown
 
 # On a folder given by an absolute path or one relative to $HOME (~ and $HOME also work)
-node ./cleaner/index.cjs --lang py --path .output/Build-LLM/markdown
-node ./cleaner/index.cjs --lang rust --path /home/sankar/.output/Rust/rustatomicsandlocks/markdown
+node ./index.cjs --lang py --path .output/Build-LLM/markdown
+node ./index.cjs --lang rust --path /home/sankar/.output/Rust/rustatomicsandlocks/markdown
 
 # Preview: list the files that would change without writing anything
-node ./cleaner/index.cjs --lang rust --dry-run
+node ./index.cjs --lang rust --dry-run
 
 # Pin the Rust profile instead of auto-detecting
-node ./cleaner/index.cjs --lang rust --profile bold-keywords
+node ./index.cjs --lang rust --profile bold-keywords
 
 # Run only one of the two Python steps
-node ./cleaner/index.cjs --clean
-node ./cleaner/index.cjs --format     # on files that are already cleaned
+node ./index.cjs --clean
+node ./index.cjs --format     # on files that are already cleaned
 
 # Show help or the Rust profiles
-node ./cleaner/index.cjs --help
-node ./cleaner/index.cjs --list-profiles
+node ./index.cjs --help
+node ./index.cjs --list-profiles
 ```
 
 ### Options
@@ -289,6 +289,7 @@ Every formatted block is tokenized again and compared with the original: only wh
 
 - Changes `\_` to `_` in prose, but leaves it alone inside inline code and link URLs.
 - Wraps a paragraph in a ```` ```py ```` fence when it starts like Python: `import`, `def`, `class`, `for … :`, an assignment such as `x = …`, a call such as `torch.manual_seed(`, and so on.
+- Removes keyword highlighting that some converters add, as in *Natural Language Processing with Transformers*: `**class MultiHeadAttention**(nn.Module): **def** …`, `**from datasets import** …`, `**for** _ **in** …`, bolded escapes inside strings (`"**\n**"`) and italic docstrings (`*"""…"""*`). A bold span is only treated as highlighting when it starts with a Python keyword, `print` or a string escape, so Python's own `**` (`**kwargs`, `x**2`) and other bold text stay as they are. Such a paragraph is then judged and fenced without the markers.
 - Moves a bold caption at the end of a code paragraph, such as `**Listing 2.1 …**`, out of the fence so it stays prose.
 - Changes existing ```` ```python ```` fences to ```` ```py ```` and leaves fences in other languages untouched, including the ```` ```rs ```` blocks from the Rust step.
 
@@ -301,6 +302,7 @@ Only ```` ```py ````, ```` ```python ```` and ```` ```python3 ```` fences are ch
 - **Spacing.** It puts spaces around operators, after commas and after `:` in dicts. It removes spaces inside brackets and around keyword arguments (`f(a=1)`). It writes `x**2` without spaces when both operands are simple, and removes leftover `\*`/`\_` escapes.
 - **Line wrapping.** A line longer than `--width` is split at its brackets, Black-style. If the contents fit on one indented line they go there; otherwise each item gets its own line and a trailing comma is added. A bracket that already ends in a trailing comma stays one item per line.
 - **Comments.** In flattened code, where a comment ends is guessed from where code-like text resumes, such as a quote, a bracket, `snake_case` or `name(`. Comments inside brackets stay with the item they follow.
+- **Italic comments.** Where the converter italicized comments (`*# Pad inputs and labels* batch = …`), the closing `*` marks exactly where the comment ends, and the comment goes on its own line above the code it describes, as the book prints it. Two comment lines merged into one italic span (`*# logit.size: … # Predict class …*`) are split back into two.
 - **Blank lines.** Two blank lines go around top-level `def`/`class` and one between methods.
 
 The output is stable: formatting already-formatted code changes nothing.
@@ -355,7 +357,7 @@ On *Build a Large Language Model (From Scratch)*, formatting raises the number o
 cd cleaner && npm test
 ```
 
-There are 81 tests under [test/](test/): 41 for the Rust step and the `.env` parser, and 40 for the JavaScript step. Each real-world bug found while building these steps has a regression test. For the JavaScript step they cover comment boundaries, Markdown escapes and bold markers, caption and prose splitting, automatic semicolon insertion, stray braces from page breaks, and stable output. For the Rust step they cover:
+There are 134 tests under [test/](test/), covering the Rust, JavaScript, Java, SQL and Python steps and the `.env` parser. The Python tests ([test/py/](test/py/)) cover books with bold keywords and italic comments. Each real-world bug found while building these steps has a regression test. For the JavaScript step they cover comment boundaries, Markdown escapes and bold markers, caption and prose splitting, automatic semicolon insertion, stray braces from page breaks, and stable output. For the Rust step they cover:
 
 - an array-type `[i32; 3]` semicolon taken for a statement end
 - `use a::{b, c};` import lists getting split up

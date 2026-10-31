@@ -13,6 +13,29 @@ function unescapeArtifacts(text) {
   return text.replace(/\\+_/g, '_');
 }
 
+// Some converters bold Python keywords as syntax highlighting:
+// `**class MultiHeadAttention**(nn.Module): **def** __init__(...)`,
+// `**from datasets import** load_dataset`, `**for** _ **in** range(n)`, and
+// even escape sequences inside strings (`"**\n**".join(...)`). A bold span is
+// that highlighting only when its text starts with a Python keyword, the
+// builtin print, or a string escape - so Python's own `**` (`**kwargs`,
+// `x**2`) is never touched.
+const BOLD_CODE = new RegExp(
+  '\\*\\*((?:(?:' +
+    ['from', 'import', 'def', 'class', 'for', 'in', 'print', 'return', 'if', 'elif', 'else', 'with', 'as',
+      'yield', 'not', 'and', 'or', 'is', 'while', 'except', 'try', 'finally', 'raise', 'lambda', 'break',
+      'continue', 'pass', 'assert', 'del', 'global', 'nonlocal', 'async', 'await', 'None', 'True', 'False'].join('|') +
+    ')\\b[^*\\n]*?)|(?:\\\\(?:[nrt0\'"]|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}))+)\\*\\*',
+  'g'
+);
+
+// ... and italicize docstrings: `*"""Compute the size."""*`.
+const ITALIC_DOCSTRING = /\*("""[^*]*?""")\s?\*/g;
+
+function stripBoldCode(text) {
+  return text.replace(BOLD_CODE, '$1').replace(ITALIC_DOCSTRING, '$1');
+}
+
 function looksLikePython(text) {
   const s = unescapeArtifacts(text).trimStart();
   if (/^(?:#{1,6}\s|!\[|\|)/.test(s)) return false;
@@ -59,11 +82,14 @@ function cleanMarkdown(source) {
   function flush() {
     if (!paragraph.length) return;
     const block = paragraph.join('\n');
-    if (looksLikePython(block)) {
-      const [code, annotation] = splitAnnotation(unescapeArtifacts(block));
-      const ticks = Math.max(3, ...Array.from(code.matchAll(/`+/g), m => m[0].length + 1));
+    // A paragraph with keyword highlighting is judged without it; prose that
+    // merely has a bold word stays prose (it doesn't then look like Python).
+    const code = stripBoldCode(block);
+    if (looksLikePython(code)) {
+      const [body, annotation] = splitAnnotation(unescapeArtifacts(code));
+      const ticks = Math.max(3, ...Array.from(body.matchAll(/`+/g), m => m[0].length + 1));
       const marker = '`'.repeat(ticks);
-      out.push(marker + 'py', code, marker);
+      out.push(marker + 'py', body, marker);
       if (annotation) out.push('', annotation);
     } else {
       // Keep inline code and link destinations intact; escaped underscores in
@@ -101,4 +127,4 @@ function cleanMarkdown(source) {
   return out.join(eol);
 }
 
-module.exports = { cleanMarkdown, looksLikePython };
+module.exports = { cleanMarkdown, looksLikePython, stripBoldCode };

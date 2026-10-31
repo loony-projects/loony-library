@@ -9,7 +9,7 @@
     "cleaner": "index.cjs"
   },
   "scripts": {
-    "test": "node --test test/*.test.js test/rust/*.test.js test/js/*.test.js test/java/*.test.js test/sql/*.test.js"
+    "test": "node --test test/*.test.js test/rust/*.test.js test/js/*.test.js test/java/*.test.js test/sql/*.test.js test/py/*.test.js"
   },
   "engines": {
     "node": ">=18"

@@ -95,6 +95,24 @@ function tokenize(source, flattened) {
       }
       continue;
     }
+    // Some converters italicize comments: `*# Place all tensors on the device* inputs = ...`.
+    // In flattened code the closing `*` marks exactly where the comment ends.
+    if (flattened && ch === '*' && src[i + 1] === '#' && (i === 0 || /\s/.test(src[i - 1]))) {
+      let close = i + 2;
+      while (close < src.length && !(src[close] === '*' && src[close - 1] !== '\\' && (close + 1 >= src.length || /\s/.test(src[close + 1])))) close++;
+      if (close < src.length) {
+        // These books print such comments on their own line above the code
+        // they describe, so each starts a line rather than trailing the
+        // statement before it. Consecutive comment lines can share one
+        // italic span: "*# logit.size: [...] # Predict class ...*".
+        for (const part of src.slice(i + 1, close).split(/\s+(?=#\s+[A-Z])/)) {
+          push('comment', part.trimEnd(), i);
+          tokens[tokens.length - 1].newlines = Math.max(1, tokens[tokens.length - 1].newlines);
+        }
+        i = close + 1;
+        continue;
+      }
+    }
     if (ch === '#') {
       const end = commentEnd(src, i, depth, flattened);
       push('comment', src.slice(i, end).trimEnd(), i);
@@ -188,9 +206,12 @@ function splitStatements(tokens, flattened) {
     const t = tokens[k];
     if (depth === 0 && current.length && (flattened ? startsStatement(current, tokens, k) : t.newlines > 0)) finish();
     if (depth === 0 && t.type === 'comment') {
+      // A comment known to start its own line (an italic `*# ...*` comment in
+      // flattened code) ends the statement before it instead of trailing it.
+      if (current.length && !(flattened && t.newlines)) { current.push(t); finish(); continue; }
+      finish();
       const last = statements[statements.length - 1];
-      if (current.length) { current.push(t); finish(); }
-      else if (last && !t.newlines && last.tokens[last.tokens.length - 1].type !== 'comment') last.tokens.push(t);
+      if (last && !t.newlines && last.tokens[last.tokens.length - 1].type !== 'comment') last.tokens.push(t);
       else statements.push({ tokens: [t], header: false, comment: true });
       continue;
     }
