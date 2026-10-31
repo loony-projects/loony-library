@@ -52,8 +52,9 @@ export default function SearchBox({ onNavigate }) {
           {results.length === 0 && (
             <li className="px-3 py-3 text-sm text-muted-foreground">No matches</li>
           )}
-          {results.map((r) => (
-            <li key={r.section_id}>
+          {/* One result per matching block, so a section can appear more than once. */}
+          {results.map((r, i) => (
+            <li key={`${r.section_id}-${i}`}>
               <button
                 onMouseDown={() => goTo(r.section_id)}
                 className="w-full rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent"
