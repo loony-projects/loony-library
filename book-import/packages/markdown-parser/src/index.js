@@ -93,7 +93,8 @@ export function parseBookDirectory(dir, overrides = {}) {
   // given the book folder itself, read its markdown/ subfolder.
   const hasMarkdown = (d) => fs.readdirSync(d).some((f) => f.endsWith(".md"));
   const markdownDir = path.join(sourceDir, "markdown");
-  if (!hasMarkdown(sourceDir) && !hasBookFolders(sourceDir) && fs.existsSync(markdownDir) && fs.statSync(markdownDir).isDirectory()) {
+  const markdownIsDir = fs.existsSync(markdownDir) && fs.statSync(markdownDir).isDirectory();
+  if (markdownIsDir && !hasBookFolders(sourceDir) && (!hasMarkdown(sourceDir) || hasBookFolders(markdownDir))) {
     sourceDir = markdownDir;
   }
   const diagnostics = createDiagnostics();

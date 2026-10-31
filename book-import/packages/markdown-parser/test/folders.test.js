@@ -197,3 +197,39 @@ test("one file per section: Chapter_NN_ folders, NN_ section files and folders, 
   assert.deepEqual(result.chapters[6].sections.map((s) => s.title), ["Index"]);
   assert.equal(codes(result).includes("folders.loose_file"), false, "README.md is not a stray page");
 });
+
+test("role folders, chapter labels, part banners inside chapters, 00_ introductions; markdown/ wins over a stray page beside it", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "md-folders-"));
+  fs.writeFileSync(path.join(base, "chapters.md"), "1. Basics 1\n");
+  fs.cpSync(
+    bookTree({
+      "Front_Matter/book_page_0001.md": "# Rust Book\n",
+      "Front_Matter/book_page_0002.md": "Copyright.\n",
+      "Preface/book_page_0004.md": "## Preface\n\nWhy.\n",
+      "Chapters/book_page_0003.md": "# Table of Contents\n\n1. **Basics** — 1\n",
+      "00_Welcome/book_page_0005.md": "## Welcome\n\nHello.\n",
+      "01_Basics/book_page_0006.md": "## Part I Day 1\n\n## Chapter 1\n\n## Basics\n\nIntro.\n",
+      "01_Basics/01_Threads/book_page_0007.md": "## 1.1 Threads\n\nSpawn.\n",
+      "02_References/book_page_0008.md": "## Chapter 2\n\n## References\n\nBorrow.\n",
+      "Index_Symbols/book_page_0009.md": "## Index\n\nA\n",
+      "Back_Matter/book_page_0010.md": "Colophon.\n",
+    }),
+    path.join(base, "markdown"),
+    { recursive: true }
+  );
+  const result = parseBookDirectory(base);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["introduction", null, "Welcome"],
+    ["chapter", "1", "Basics"],
+    ["chapter", "2", "References"],
+    ["back_matter", null, "Back Matter"],
+  ]);
+  const [front, , basics, , back] = result.chapters;
+  assert.deepEqual(front.sections.map((s) => [s.role, s.title]), [["front_matter", "Front Matter"], ["toc", "Chapters"], ["preface", "Preface"]]);
+  assert.deepEqual(back.sections.map((s) => [s.role, s.title]), [["index", "Index Symbols"], ["back_matter", "Back Matter"]]);
+  assert.deepEqual(basics.sections[0].blocks.map((b) => [b.block_type, b.content.text]), [
+    ["subheading", "Part I Day 1"],
+    ["paragraph", "Intro."],
+  ], "the part banner stays; the Chapter 1 label and title are consumed");
+});

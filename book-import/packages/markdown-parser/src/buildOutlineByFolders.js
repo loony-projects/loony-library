@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseFile } from "./parseFile.js";
-import { normalizeRole } from "./roles.js";
+import { normalizeRole, ROLES } from "./roles.js";
 import { slugify } from "./buildOutlineByToc.js";
 
 // Stage 3 - book structure from folders, for a book already organized as
@@ -29,6 +29,11 @@ import { slugify } from "./buildOutlineByToc.js";
 //   End_Matter/                             back matter; an NN_Appendix_X_ folder
 //                                           or file in it is an appendix
 //
+// Unnumbered folders named for a part of a book (Foreword/, Preface/,
+// Chapters/ or Contents/, Epilogue/, Index/, ...) are front or back matter,
+// in the usual book order; a Front_Matter/ or Back_Matter/ folder of page
+// files is one section. A 00_ folder is an unnumbered introduction.
+//
 // The folders are the structure; headings never create chapters or
 // sections. A chapter's or section's own title heading (the first heading
 // of its first page, when it matches the folder's title) gives the printed
@@ -44,6 +49,25 @@ const APPENDIX = /^Appendix_([A-Za-z0-9]+)(?:_|\.|$)/;
 
 const bare = (name) => name.replace(/\.md$/, "").replace(NUMBERED, "$2");
 const isMatter = (name) => FRONT.test(bare(name)) || BACK.test(bare(name));
+const ROLE_ORDER = Object.keys(ROLES);
+
+// The front/back matter role an unnumbered folder's name gives:
+// Preface -> preface, Chapters -> toc, Index_Symbols -> index.
+function folderRole(name) {
+  if (NUMBERED.test(name) || CHAPTER_DIR.test(name)) return null;
+  if (FRONT.test(name)) return "front_matter";
+  if (BACK.test(name)) return "back_matter";
+  const words = name.toLowerCase().split(/[_\s-]+/).filter(Boolean);
+  if (/^(chapters|contents|table_of_contents)$/.test(words.join("_"))) return "toc";
+  const role = normalizeRole(words.join("-")) ?? normalizeRole(words[0]);
+  return role && ROLES[role] !== "main" ? role : null;
+}
+// Which matter an entry is: "front", "back" or null.
+function matterOf(name) {
+  if (isMatter(name)) return FRONT.test(bare(name)) ? "front" : "back";
+  const role = folderRole(name);
+  return role ? ROLES[role] : null;
+}
 
 const byName = (a, b) => a.localeCompare(b, "en", { numeric: true });
 
@@ -63,15 +87,21 @@ function topEntries(root) {
   const listed = [];
   const loose = [];
   for (const e of entries) {
-    if (e.isDirectory() && (NUMBERED.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name))) listed.push({ name: e.name, dir: true });
+    if (e.isDirectory() && (NUMBERED.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name) || folderRole(e.name))) listed.push({ name: e.name, dir: true });
     else if (e.isFile() && e.name.endsWith(".md")) {
       if (NUMBERED.test(e.name) && isMatter(e.name)) listed.push({ name: e.name, dir: false });
       else if (!/^readme\.md$/i.test(e.name)) loose.push(e.name);
     }
   }
-  // Front matter, then numbered folders, then chapters, then back matter.
-  const rank = (e) => (FRONT.test(bare(e.name)) ? 0 : BACK.test(bare(e.name)) ? 3 : CHAPTER_DIR.test(e.name) ? 2 : 1);
-  listed.sort((a, b) => rank(a) - rank(b) || byName(a.name, b.name));
+  // Front matter, then numbered folders, then chapters, then back matter;
+  // unnumbered matter folders in the usual book order (Contents, Foreword,
+  // Preface; Epilogue, Index).
+  const rank = (e) => {
+    const matter = matterOf(e.name);
+    return matter === "front" ? 0 : matter === "back" ? 3 : CHAPTER_DIR.test(e.name) ? 2 : 1;
+  };
+  const roleRank = (e) => (NUMBERED.test(e.name) ? -1 : ROLE_ORDER.indexOf(folderRole(e.name) ?? ""));
+  listed.sort((a, b) => rank(a) - rank(b) || roleRank(a) - roleRank(b) || byName(a.name, b.name));
   return { listed, loose: loose.sort(byName) };
 }
 
@@ -119,6 +149,23 @@ function readPages(root, relDir, files, diagnostics) {
   });
 }
 
+// A heading that is only a chapter's label: "Chapter 4", "CHAPTER 4", "6".
+const CHAPTER_LABEL = /^(?:chap(?:ter|\.)?\s+)?(\d+)\.?$/i;
+
+// The chapter's title heading among the first headings of its opening pages,
+// with the "Chapter 4" label heading just before it, if any. A part banner
+// may come first ("Part I Day 1: Morning", then "Chapter 3", "Welcome to Day 1").
+function chapterHeadings(opening, names) {
+  const firsts = opening.flatMap((p) => p.items.filter((item) => item.kind === "heading")).slice(0, 4);
+  for (let i = 0; i < firsts.length; i++) {
+    const title = names.map((n) => openingHeading(opening, n, firsts[i])).find(Boolean);
+    if (!title) continue;
+    const label = i > 0 && CHAPTER_LABEL.test(headingText(firsts[i - 1])) ? firsts[i - 1] : null;
+    return { title, label };
+  }
+  return { title: null, label: null };
+}
+
 // "CHAPTER 1 Hello Transformers" -> "Hello Transformers" (the number is kept separately).
 const stripChapterLabel = (text) => text.replace(/^chap(?:ter|\.)?\s+[0-9ivxlc]+\b[.:]?\s*/i, "");
 
@@ -126,8 +173,7 @@ const stripChapterLabel = (text) => text.replace(/^chap(?:ter|\.)?\s+[0-9ivxlc]+
 // Large Language Models" for 02_Understanding_Large_Language_Models,
 // "1.1 What is an LLM?" for 01_What_is_an_LLM, "Appendix A. Introduction to
 // PyTorch" for 09_Appendix_A_Introduction_to_PyTorch.
-function openingHeading(pages, folderTitle) {
-  const first = pages[0]?.items.find((item) => item.kind === "heading");
+function openingHeading(pages, folderTitle, first = pages[0]?.items.find((item) => item.kind === "heading")) {
   if (!first) return null;
   const want = key(folderTitle);
   const appendix = headingText(first).match(/^appendix\s+([a-z0-9]+)\b[.:]?\s*(.*)$/i);
@@ -148,10 +194,11 @@ function openingHeading(pages, folderTitle) {
 // Blocks of a run of pages: headings become subheadings, except `consume`
 // (the folder's own title heading).
 function blocksOf(pages, consume = null) {
+  const consumed = consume instanceof Set ? consume : new Set([consume]);
   const blocks = [];
   for (const page of pages) {
     for (const item of page.items) {
-      if (item === consume) continue;
+      if (consumed.has(item)) continue;
       if (item.kind === "block") blocks.push(item);
       else {
         const text = headingText(item);
@@ -226,8 +273,10 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const firstText = firstHeading ? headingText(firstHeading) : "";
 
     const appendixLabel = (name.match(APPENDIX) ?? firstText.match(/^appendix\s+([a-z0-9]+)\b/i))?.[1]?.toUpperCase() ?? null;
-    const isPart = /^part\b/i.test(firstText) && !units.length;
-    const heading = opening.length ? openingHeading(opening, name.replace(/_+/g, " ")) ?? openingHeading(opening, folderTitle) : null;
+    // A part: a Part_ folder (or one titled by its part heading) holding just the part's page.
+    const isPart = /^part\b/i.test(firstText) && !units.length && (Boolean(partLabel) || key(firstText).includes(key(folderTitle)));
+    const { title: heading, label } = opening.length ? chapterHeadings(opening, [name.replace(/_+/g, " "), folderTitle]) : { title: null, label: null };
+    const introduction = /^0+_/.test(dir) && !chapterDir;
 
     let role;
     let number;
@@ -242,14 +291,17 @@ export function buildOutlineByFolders(root, { diagnostics }) {
       const m = heading && headingText(heading).match(/^appendix\s+[a-z0-9]+\b[.:]?\s*(.+)$/i);
       title = m ? m[1].trim() : folderTitle.replace(/^Appendix\s+[A-Za-z0-9]+\.?\s*/i, "");
     } else {
-      role = chapterDir ? "chapter" : normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
-      if (role === "chapter") chapterNumber = chapterDir ? Number(chapterDir[1]) : chapterNumber + 1;
+      role = chapterDir || label ? "chapter" : introduction ? "introduction" : normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
+      // The book's own number - "Chapter 4" label, "CHAPTER 1 ..." or "1 ..." title,
+      // Chapter_04_ folder - else the next one.
+      const printed = (label && headingText(label).match(CHAPTER_LABEL)[1]) ?? (heading && headingText(heading).match(/^(?:chap(?:ter|\.)?\s+)?(\d+)\b/i)?.[1]) ?? chapterDir?.[1];
+      if (role === "chapter") chapterNumber = printed ? Number(printed) : chapterNumber + 1;
       number = role === "chapter" ? String(chapterNumber) : null;
       title = (heading && stripChapterLabel(headingText(heading)).replace(/^\d+\.?\s+/, "")) || folderTitle;
     }
 
     const sections = [];
-    const bodyBlocks = blocksOf(opening, heading);
+    const bodyBlocks = blocksOf(opening, new Set([heading, label]));
     if (bodyBlocks.length || !units.length) {
       sections.push(section({ role: "body", title, depth: 1, file: opening[0]?.file ?? dir, position: opening[0] ? { file: opening[0].file } : position, blocks: bodyBlocks }));
     }
@@ -276,76 +328,84 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     return element;
   }
 
+  // Front and back matter: one element each, gathering every front (back)
+  // folder or file in order.
+  const matter = { front: null, back: null };
+  const appendices = [];
+  const matterElement = (division, entry) => {
+    if (!matter[division]) {
+      const title = division === "front" ? "Front Matter" : "Back Matter";
+      matter[division] = { role: `${division}_matter`, number: null, slug: uniqueSlug(title), title, level: null, sort_order: 0, position: { file: entry }, partId: null, sections: [] };
+      if (division === "front") elements.push(matter.front);
+    }
+    return matter[division];
+  };
+
   for (const { name: entry, dir: isDir } of top.listed) {
+    const division = matterOf(entry);
+    if (!division) {
+      const name = CHAPTER_DIR.test(entry) ? entry : entry.replace(NUMBERED, "$2");
+      elements.push(chapterElement(entry, name, chapterContent(root, entry, diagnostics)));
+      continue;
+    }
     // Front and back pages: titled from the file name. Consecutive files
     // with the same name are one section (05_Preface.md, 06_Preface.md ->
     // "Preface"); a Blank page joins the section before it (or after it,
-    // if it comes first). A subfolder is one section; in the back pages an
-    // Appendix_X file or folder is an appendix of its own.
-    if (isMatter(entry)) {
-      const front = FRONT.test(bare(entry));
-      const sections = [];
-      const appendices = [];
-      let pendingBlank = [];
-      const inner = isDir ? entriesOf(path.join(root, entry)) : { files: [], dirs: [] };
-      const items = isDir
-        ? [...inner.files.map((f) => ({ name: f, dir: false })), ...inner.dirs.map((d) => ({ name: d, dir: true }))].sort((a, b) => byName(a.name, b.name))
-        : [{ name: entry, dir: false, top: true }];
-      for (const item of items) {
-        const rel = item.top ? entry : path.join(entry, item.name);
-        const itemName = item.name.replace(/\.md$/, "");
-        if (!front && APPENDIX.test(bare(itemName))) {
-          const content = item.dir ? chapterContent(root, rel, diagnostics) : { opening: readFiles(root, [rel], diagnostics), units: [] };
-          appendices.push(chapterElement(rel, bare(itemName), content));
-          continue;
-        }
-        const pages = readFiles(root, item.dir ? allPageFiles(root, rel) : [rel], diagnostics);
-        const title = titleFromName(itemName) || item.name;
-        const heading = pages[0]?.items.find((it) => it.kind === "heading");
-        const consume = heading && key(heading.title) === key(title) ? heading : null;
-        const blocks = blocksOf(pages, consume);
-        const last = sections.at(-1);
-        if (/^blank$/i.test(title)) {
-          if (last) last.blocks.push(...blocks);
-          else pendingBlank.push(...blocks);
-          continue;
-        }
-        if (last && key(last.title) === key(title)) {
-          last.blocks.push(...blocks);
-          continue;
-        }
-        sections.push(
-          section({
-            role: normalizeRole(title.replace(/\s+/g, "-")) ?? "section",
-            title,
-            depth: 1,
-            file: pages[0]?.file ?? rel,
-            position: { file: pages[0]?.file ?? rel },
-            blocks: [...pendingBlank, ...blocks],
-          })
-        );
-        pendingBlank = [];
-      }
-      elements.push(...appendices);
-      if (sections.length) {
-        elements.push({
-          role: front ? "front_matter" : "back_matter",
-          number: null,
-          slug: uniqueSlug(front ? "Front Matter" : "Back Matter"),
-          title: front ? "Front Matter" : "Back Matter",
-          level: null,
-          sort_order: 0,
-          position: { file: entry },
-          partId: null,
-          sections,
-        });
-      }
-      continue;
+    // if it comes first). A subfolder is one section, and so are a
+    // Front_Matter folder's page files; in the back pages an Appendix_X file
+    // or folder is an appendix of its own. A folder named for its role
+    // (Preface/, Index/) is one section.
+    const front = division === "front";
+    const { sections } = matterElement(division, entry);
+    let pendingBlank = [];
+    const folderTitle = titleFromName(bare(entry));
+    let items;
+    if (!isDir) items = [{ name: entry, dir: false, top: true }];
+    else if (!isMatter(entry)) items = [{ name: entry, dir: true, top: true, title: folderTitle, role: folderRole(entry) }];
+    else {
+      const inner = entriesOf(path.join(root, entry));
+      items = [...inner.files.map((f) => ({ name: f, dir: false, ...(NUMBERED.test(f) ? {} : { title: folderTitle }) })), ...inner.dirs.map((d) => ({ name: d, dir: true }))].sort((x, y) => byName(x.name, y.name));
     }
-
-    const name = CHAPTER_DIR.test(entry) ? entry : entry.replace(NUMBERED, "$2");
-    elements.push(chapterElement(entry, name, chapterContent(root, entry, diagnostics)));
+    for (const item of items) {
+      const rel = item.top ? entry : path.join(entry, item.name);
+      const itemName = item.name.replace(/\.md$/, "");
+      if (!front && !item.top && APPENDIX.test(bare(itemName))) {
+        const content = item.dir ? chapterContent(root, rel, diagnostics) : { opening: readFiles(root, [rel], diagnostics), units: [] };
+        appendices.push(chapterElement(rel, bare(itemName), content));
+        continue;
+      }
+      const pages = readFiles(root, item.dir ? allPageFiles(root, rel) : [rel], diagnostics);
+      // 007_ConventionsUsed.md -> "Conventions Used"
+      const title = item.title ?? (titleFromName(itemName).replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2") || item.name);
+      const heading = pages[0]?.items.find((it) => it.kind === "heading");
+      const consume = heading && key(heading.title) === key(title) ? heading : null;
+      const blocks = blocksOf(pages, consume);
+      const last = sections.at(-1);
+      if (/^blank$/i.test(title)) {
+        if (last) last.blocks.push(...blocks);
+        else pendingBlank.push(...blocks);
+        continue;
+      }
+      if (last && key(last.title) === key(title)) {
+        last.blocks.push(...blocks);
+        continue;
+      }
+      sections.push(
+        section({
+          role: item.role ?? normalizeRole(title.replace(/\s+/g, "-")) ?? "section",
+          title,
+          depth: 1,
+          file: pages[0]?.file ?? rel,
+          position: { file: pages[0]?.file ?? rel },
+          blocks: [...pendingBlank, ...blocks],
+        })
+      );
+      pendingBlank = [];
+    }
   }
+  elements.push(...appendices);
+  if (matter.back?.sections.length) elements.push(matter.back);
+  if (matter.front && !matter.front.sections.length) elements.splice(elements.indexOf(matter.front), 1);
 
   if (!elements.length) {
     diagnostics.error("source.empty", "The numbered folders contain no Markdown pages.", {});
