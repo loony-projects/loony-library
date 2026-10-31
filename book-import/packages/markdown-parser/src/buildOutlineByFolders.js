@@ -74,6 +74,9 @@ function readPages(root, relDir, files, diagnostics) {
   });
 }
 
+// "CHAPTER 1 Hello Transformers" -> "Hello Transformers" (the number is kept separately).
+const stripChapterLabel = (text) => text.replace(/^chap(?:ter|\.)?\s+[0-9ivxlc]+\b[.:]?\s*/i, "");
+
 // The title heading a folder opens with, if it names the folder: "1 Understanding
 // Large Language Models" for 02_Understanding_Large_Language_Models,
 // "1.1 What is an LLM?" for 01_What_is_an_LLM, "Appendix A. Introduction to
@@ -83,10 +86,13 @@ function openingHeading(pages, folderTitle) {
   if (!first) return null;
   const want = key(folderTitle);
   const appendix = headingText(first).match(/^appendix\s+([a-z0-9]+)\b[.:]?\s*(.*)$/i);
+  // "CHAPTER 1 Hello Transformers" names 02_Hello_Transformers too.
+  const withoutChapterLabel = stripChapterLabel(headingText(first));
   const candidates = [
     key(first.title),
     key(headingText(first)),
     key(numberAndTitle(first).title),
+    key(withoutChapterLabel),
     appendix ? key(appendix[2]) : null,
     appendix ? key(`Appendix ${appendix[1]} ${appendix[2]}`) : null,
   ];
@@ -138,23 +144,42 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const inner = entriesOf(path.join(root, dir));
     const position = { file: dir };
 
-    // Front and back pages: one section per file, titled from the file name.
+    // Front and back pages: titled from the file name. Consecutive files
+    // with the same name are one section (05_Preface.md, 06_Preface.md ->
+    // "Preface"); a Blank page joins the section before it (or after it,
+    // if it comes first).
     if (FRONT.test(name) || BACK.test(name)) {
       const front = FRONT.test(name);
-      const sections = inner.files.map((file) => {
+      const sections = [];
+      let pendingBlank = [];
+      for (const file of inner.files) {
         const [page] = readPages(root, dir, [file], diagnostics);
         const title = titleFromName(file.replace(/\.md$/, "")) || file;
         const heading = page.items.find((item) => item.kind === "heading");
         const consume = heading && key(heading.title) === key(title) ? heading : null;
-        return section({
-          role: normalizeRole(title.replace(/\s+/g, "-")) ?? "section",
-          title,
-          depth: 1,
-          file: page.file,
-          position: { file: page.file },
-          blocks: blocksOf([page], consume),
-        });
-      });
+        const blocks = blocksOf([page], consume);
+        const last = sections.at(-1);
+        if (/^blank$/i.test(title)) {
+          if (last) last.blocks.push(...blocks);
+          else pendingBlank.push(...blocks);
+          continue;
+        }
+        if (last && key(last.title) === key(title)) {
+          last.blocks.push(...blocks);
+          continue;
+        }
+        sections.push(
+          section({
+            role: normalizeRole(title.replace(/\s+/g, "-")) ?? "section",
+            title,
+            depth: 1,
+            file: page.file,
+            position: { file: page.file },
+            blocks: [...pendingBlank, ...blocks],
+          })
+        );
+        pendingBlank = [];
+      }
       for (const sub of inner.dirs) {
         diagnostics.warning("folders.nested_ignored", `${dir}/${sub} - folders inside ${front ? "front" : "back"} pages aren't read.`, { file: dir });
       }
@@ -201,7 +226,7 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     } else {
       role = normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
       number = role === "chapter" ? String(++chapterNumber) : null;
-      title = heading?.title || folderTitle;
+      title = (heading && stripChapterLabel(headingText(heading)).replace(/^\d+\.?\s+/, "")) || folderTitle;
     }
 
     const sections = [];

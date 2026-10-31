@@ -130,3 +130,26 @@ test("flat page files without numbered folders still use the contents page", () 
   assert.deepEqual(result.chapters.map((c) => c.title), ["Front Matter", "Alpha"]);
   assert.ok(codes(result).includes("toc.used"));
 });
+
+test("front/back pages: consecutive files with the same name are one section, blank pages join their neighbour", () => {
+  const dir = bookTree({
+    "01_FrontPages/01_Blank.md": "\n",
+    "01_FrontPages/02_Praise.md": "Great book.\n",
+    "01_FrontPages/03_Praise.md": "Really great.\n",
+    "01_FrontPages/04_Blank.md": "\n",
+    "01_FrontPages/05_Preface.md": "## Preface\n\nWhy.\n",
+    "01_FrontPages/06_Preface.md": "Who for.\n",
+    "02_Hello_Transformers/p_page_0025.md": "## **CHAPTER 1 Hello Transformers**\n\nWelcome.\n",
+    "03_BackPages/01_Index.md": "A, B\n",
+    "03_BackPages/02_Index.md": "C, D\n",
+  });
+  const result = parseBookDirectory(dir);
+  const [front, chapter, back] = result.chapters;
+  assert.deepEqual(front.sections.map((s) => [s.title, s.blocks.map((b) => b.content.text)]), [
+    ["Praise", ["Great book.", "Really great."]],
+    ["Preface", ["Why.", "Who for."]],
+  ]);
+  assert.deepEqual(back.sections.map((s) => [s.role, s.title, s.blocks.length]), [["index", "Index", 2]]);
+  assert.equal(chapter.title, "Hello Transformers");
+  assert.deepEqual(chapter.sections[0].blocks.map((b) => b.content.text), ["Welcome."], 'a "CHAPTER 1 ..." title heading is the chapter\'s own, not repeated');
+});
