@@ -153,3 +153,47 @@ test("front/back pages: consecutive files with the same name are one section, bl
   assert.equal(chapter.title, "Hello Transformers");
   assert.deepEqual(chapter.sections[0].blocks.map((b) => b.content.text), ["Welcome."], 'a "CHAPTER 1 ..." title heading is the chapter\'s own, not repeated');
 });
+
+test("one file per section: Chapter_NN_ folders, NN_ section files and folders, Front_Matter and End_Matter with appendices", () => {
+  const dir = bookTree({
+    "README.md": "# Index of the folders\n",
+    "00_Front_Matter.md": "# Hands-On Book\n\nBy us.\n",
+    "01_Preface/00_Overview.md": "## Preface\n\nWhy.\n",
+    "01_Preface/01_Prerequisites.md": "## Prerequisites\n\nPython.\n",
+    "Chapter_01_An_Introduction/00_Introduction.md": "## Chapter 1. An Introduction\n\nWelcome.\n",
+    "Chapter_01_An_Introduction/01_What_Is_AI.md": "## What Is AI?\n\nA field.\n",
+    "Chapter_01_An_Introduction/02_History/00_Overview.md": "## History\n\nLong.\n",
+    "Chapter_01_An_Introduction/02_History/01_Bag_of_Words.md": "### Bag-of-Words\n\nCounts.\n",
+    "Chapter_01_An_Introduction/03_Summary.md": "## Summary\n\nDone.\n",
+    "Chapter_02_Tokens/00_Introduction.md": "## Chapter 2. Tokens\n\nTokens.\n",
+    "End_Matter/01_Appendix_A_Python/00_Overview.md": "## Appendix A. Python\n\nInstall it.\n",
+    "End_Matter/01_Appendix_A_Python/01_Windows.md": "## A.1 Windows\n\nClick.\n",
+    "End_Matter/02_Appendix_B_Resources.md": "## Appendix B. Resources\n\nLinks.\n",
+    "End_Matter/03_Index.md": "## Index\n\nA, B\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["preface", null, "Preface"],
+    ["chapter", "1", "An Introduction"],
+    ["chapter", "2", "Tokens"],
+    ["appendix", "A", "Python"],
+    ["appendix", "B", "Resources"],
+    ["back_matter", null, "Back Matter"],
+  ]);
+  const one = result.chapters[2];
+  assert.deepEqual(one.sections.map((s) => [s.role, s.title]), [
+    ["body", "An Introduction"],
+    ["section", "What Is AI?"],
+    ["section", "History"],
+    ["section", "Summary"],
+  ]);
+  assert.deepEqual(one.sections[2].blocks.map((b) => [b.block_type, b.content.text]), [
+    ["paragraph", "Long."],
+    ["subheading", "Bag-of-Words"],
+    ["paragraph", "Counts."],
+  ], "a section folder's subsection pages stay in the section");
+  assert.deepEqual(result.chapters[4].sections.map((s) => [s.numbering, s.title]), [[null, "Python"], ["A.1", "Windows"]]);
+  assert.deepEqual(result.chapters[6].sections.map((s) => s.title), ["Index"]);
+  assert.equal(codes(result).includes("folders.loose_file"), false, "README.md is not a stray page");
+});
