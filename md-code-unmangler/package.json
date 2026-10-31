@@ -1,0 +1,17 @@
+{
+  "name": "cleaner",
+  "version": "1.0.0",
+  "description": "Cleans PDF-extracted Markdown: reflows squashed Rust listings, fences and prettifies JavaScript, Java, SQL and Python code.",
+  "private": true,
+  "license": "MIT",
+  "main": "index.cjs",
+  "bin": {
+    "cleaner": "index.cjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js test/rust/*.test.js test/js/*.test.js test/java/*.test.js test/sql/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
