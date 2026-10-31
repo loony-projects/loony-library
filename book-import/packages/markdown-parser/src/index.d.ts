@@ -230,6 +230,8 @@ export interface Diagnostics {
  * it isn't a directory.
  */
 export function parseBookDirectory(dir: string, overrides?: { title?: string; slug?: string; author?: string }): BookParseResult;
+/** Chapters and sections from a markdown directory organized into numbered folders (see docs/prompts/organize-book-markdown.md). */
+export function buildOutlineByFolders(root: string, ctx: { diagnostics: Diagnostics }): Chapter[];
 /** Same as parseBookDirectory, for Markdown pages already in memory (in reading order). */
 export function parseBookPages(pages: { file: string | null; source: string }[], metadata?: Record<string, unknown>): BookParseResult;
 export function slugify(text: string): string;

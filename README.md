@@ -69,7 +69,7 @@ the dev servers - see [docs/dev_setup.md](docs/dev_setup.md#starting-and-stoppin
 
 ## Adding a book
 
-The platform is book-agnostic: a book is just a directory of Markdown (e.g. pdf-to-md output) that includes the book's own contents page. Point the loader at it — the chapters come from that contents page, and title and slug from the directory. A book without a contents page is reported ("Chapters weren't found") instead of being imported. See [docs/migration.md](docs/migration.md).
+The platform is book-agnostic: a book is just a directory of Markdown (e.g. pdf-to-md output). Point the loader at it — chapters and sections come from its organized folders (see [docs/prompts/organize-book-markdown.md](docs/prompts/organize-book-markdown.md)) or, for flat pages, from the book's own contents page; title and slug come from the directory. A book without a contents page is reported ("Chapters weren't found") instead of being imported. See [docs/migration.md](docs/migration.md).
 
 ## Docs
 

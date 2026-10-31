@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildOutlineByToc, slugify } from "./buildOutlineByToc.js";
+import { buildOutlineByFolders, hasBookFolders } from "./buildOutlineByFolders.js";
 import { parseFile } from "./parseFile.js";
 import { collectTerms } from "./extractTermList.js";
 import { finalizeOutline } from "./finalize.js";
@@ -16,7 +17,7 @@ import "./analysis/index.js"; // registers the built-in analyzers before any par
 //   and, optionally and asynchronously, 6c analyzeCodeBlocks (analysis/).
 
 export { parseFile, extractItems, astOf } from "./parseFile.js";
-export { buildOutlineByToc, slugify };
+export { buildOutlineByToc, buildOutlineByFolders, slugify };
 export { readTableOfContents } from "./toc.js";
 export { extractTermList, extractTermEntries, collectTerms, termKey } from "./extractTermList.js";
 export { registerLanguage, normalizeLanguage, parseFenceInfo, getLanguage, listLanguages } from "./languages.js";
@@ -31,10 +32,14 @@ export { parseHeadingText } from "./headings.js";
 // (<name>_page_NNNN.md files, <name>_metadata.json, images/). Everything
 // about the book comes from that directory; there is no per-book config.
 //
-// Every *.md directly in it is a page, in numeric-aware name order
-// ("page_2" before "page_10"). Chapters come only from the book's own
-// contents page (toc.js); without one the result has no chapters and a
-// toc.not_found error.
+// Structure comes from what the book states, never from guessing:
+//   - organized into numbered folders (NN_FrontPages, NN_<Chapter>/NN_<Section>,
+//     NN_BackPages - see docs/prompts/organize-book-markdown.md): the
+//     folders are the chapters and sections (buildOutlineByFolders.js);
+//   - otherwise every *.md directly in it is a page, in numeric-aware name
+//     order ("page_2" before "page_10"), and chapters come only from the
+//     book's own contents page (toc.js); without one the result has no
+//     chapters and a toc.not_found error.
 
 function readMetadataName(sourceDir, files, diagnostics) {
   const metaFile = files.find((f) => f.endsWith("_metadata.json"));
@@ -88,12 +93,16 @@ export function parseBookDirectory(dir, overrides = {}) {
   // given the book folder itself, read its markdown/ subfolder.
   const hasMarkdown = (d) => fs.readdirSync(d).some((f) => f.endsWith(".md"));
   const markdownDir = path.join(sourceDir, "markdown");
-  if (!hasMarkdown(sourceDir) && fs.existsSync(markdownDir) && fs.statSync(markdownDir).isDirectory()) {
+  if (!hasMarkdown(sourceDir) && !hasBookFolders(sourceDir) && fs.existsSync(markdownDir) && fs.statSync(markdownDir).isDirectory()) {
     sourceDir = markdownDir;
   }
   const diagnostics = createDiagnostics();
   const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
   const book = bookMetadata(sourceDir, entries.map((e) => e.name), overrides, diagnostics);
+
+  if (hasBookFolders(sourceDir)) {
+    return assemble(book, buildOutlineByFolders(sourceDir, { diagnostics }), diagnostics);
+  }
 
   const files = entries
     .filter((e) => e.isFile() && e.name.endsWith(".md"))

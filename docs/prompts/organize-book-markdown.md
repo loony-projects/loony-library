@@ -1,5 +1,8 @@
 # Prompt: organize a PDF-converted book into chapter and section folders
 
+The result is what book-import reads directly: the folders become the
+book's chapters and sections (see ../migration.md).
+
 Copy everything below the line into the AI assistant (one that can read and
 write files, e.g. Claude Code), and fill in the book folder on the first line.
 Works for any kind of book: technical books, books with parts, books in any

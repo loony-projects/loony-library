@@ -12,6 +12,8 @@ npm workspace of two packages:
 
 The input is a book's Markdown directory (e.g. pdf-to-md output:
 `<name>_page_NNNN.md`, `<name>_metadata.json`, `images/`). Chapters come
+from organized folders (`01_FrontPages/`, `02_<Chapter>/01_<Section>/`, …, see
+../docs/prompts/organize-book-markdown.md) when the book has them, otherwise
 only from the book's own contents page (a page headed "Contents", "Table of
 Contents", "Contents at a Glance", "Brief Contents" or "Chapters"); without
 one, dry-run and load stop with "Chapters weren't found". Title and slug

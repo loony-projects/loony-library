@@ -5,7 +5,7 @@ Code lives in [book-import/](../book-import/) — an npm workspace of two packag
 - **[packages/markdown-parser](../book-import/packages/markdown-parser/)** (`@loony-library/markdown-parser`) — markdown source → outline `{ book, chapters, glossary, symbols, codeBlocks, diagnostics }`. No database dependency. Public API in [src/index.js](../book-import/packages/markdown-parser/src/index.js), typed in [src/index.d.ts](../book-import/packages/markdown-parser/src/index.d.ts); CLI in [src/cli.js](../book-import/packages/markdown-parser/src/cli.js). The backend's section editor uses the same package ([backend/src/parseMarkdown.js](../backend/src/parseMarkdown.js)), so an edited section is stored in exactly the block shapes an import produces.
 - **[packages/migration](../book-import/packages/migration/)** (`@loony-library/migration`) — imports the parser, then copies images and loads the outline into Postgres. The schema it loads into is [backend/migrations/001-schema.sql](../backend/migrations/001-schema.sql), created by the backend's `npm run migrate`.
 
-The input is a book's **Markdown directory** — typically pdf-to-md output (`<name>_page_NNNN.md` files, `<name>_metadata.json`, `images/`), e.g. `~/.output/NodeJs/Beginning_Nodejs/markdown`. The directory is `UPLOAD_BOOK_PATH` in `book-import/.env`. There is no per-book config: the title comes from `<name>_metadata.json` (the PDF name) or the folder name, the slug from the title (both overridable with `--title` / `--slug`). **Chapters come only from the book's own contents page** — never from the headings in its pages. A book without a usable contents page is reported ("Chapters weren't found") and not imported.
+The input is a book's **Markdown directory** — typically pdf-to-md output (`<name>_page_NNNN.md` files, `<name>_metadata.json`, `images/`), e.g. `~/.output/NodeJs/Beginning_Nodejs/markdown`. The directory is `UPLOAD_BOOK_PATH` in `book-import/.env`. There is no per-book config: the title comes from `<name>_metadata.json` (the PDF name) or the folder name, the slug from the title (both overridable with `--title` / `--slug`). The structure comes only from what the book states, never from the headings in its pages: **organized folders** if the book has them (below), otherwise **the book's own contents page**. A book with neither is reported ("Chapters weren't found") and not imported.
 
 ## Pipeline
 
@@ -49,7 +49,30 @@ Each file is parsed once; ownership is assigned in one pass; all state (diagnost
 | `definition` | `identifier`, `label`, `url`, `title` | Link reference definition; kept for round-tripping, not rendered. |
 | `unknown` | `nodeType`, `markdown` | Anything else, rendered as escaped source. |
 
-## Chapters: the book's contents page
+## Chapters and sections from organized folders
+
+**[buildOutlineByFolders.js](../book-import/packages/markdown-parser/src/buildOutlineByFolders.js)** — used when `markdown/` holds numbered folders, as produced with [prompts/organize-book-markdown.md](./prompts/organize-book-markdown.md):
+
+```
+markdown/
+  01_FrontPages/                 front matter - one section per file (02_Copyright.md -> "Copyright")
+  02_<Chapter>/                  a chapter: its loose pages are the chapter's opening ("body" section)
+    01_<Section>/                each numbered subfolder is a section
+  03_Part_I_<Title>/             a folder whose first heading is "Part ..." is a part;
+  04_Part_I_<Chapter>/             later chapters carrying the same Part_ label belong to it
+  NN_Appendix_A_<Title>/         an appendix (or a folder whose first heading is "Appendix A ...")
+  NN_BackPages/                  back matter - one section per file (01_Glossary.md is the glossary)
+```
+
+- The folders are the structure; no contents page is needed, and headings never create chapters or sections.
+- Titles and numbers come from each folder's own title heading — the first heading of its first page, when it names the folder (`## 1.1 What is an LLM?` for `01_What_is_an_LLM`, `## A.1 What is PyTorch`, `## Appendix A. Introduction to PyTorch`). That heading is consumed; every other heading stays in place as a `subheading`. Without a matching heading the folder name is used (`_` → space).
+- Chapters are numbered 1, 2, 3… in folder order; appendices get their letter.
+- File names inside front/back pages give those sections their role (`Copyright`, `Glossary`, `About_the_Author`).
+- Reported, not used: `.md` files loose in `markdown/` (`folders.loose_file`) and folders nested deeper than chapter → section (`folders.nested_ignored`).
+
+## Chapters from the book's contents page
+
+Used for flat per-page Markdown (no numbered folders).
 
 **[toc.js](../book-import/packages/markdown-parser/src/toc.js)**, **[buildOutlineByToc.js](../book-import/packages/markdown-parser/src/buildOutlineByToc.js)**
 
@@ -68,7 +91,7 @@ A book's chapters are whatever its own table of contents lists. Headings in the 
 
 ## Glossary and symbols
 
-Sources: the element for a contents entry titled `Glossary` / `Abbreviations` (role `glossary`) or `Symbols` (role `symbols`).
+Sources: the element for a contents entry titled `Glossary` / `Abbreviations` (role `glossary`) or `Symbols` (role `symbols`), or a front/back-pages file named that way (`01_Glossary.md`).
 
 - **Entry forms** — explicit markers only: `TERM → expansion` (one per line, anywhere in a term source), and inside glossary/symbols *elements* also `**TERM**: expansion` (or `—`/`–`). A bold word in ordinary prose is never a term.
 - Lines come from paragraphs, list items and blockquotes of the AST; **code (fenced, indented, inline), headings, HTML and tables are never scanned**. A line with two arrows is ambiguous and reported (`terms.invalid_entry`).
@@ -115,6 +138,8 @@ The grammars are WASM builds loaded through `web-tree-sitter` (no native compila
 | `source.empty` | error | The directory has no Markdown files. |
 | `toc.not_found` | error | No contents page — chapters weren't found. |
 | `toc.insufficient` | error | The contents page has no chapter entries, or none could be located in the pages. |
+| `folders.used` | info | Structure taken from organized folders. |
+| `folders.loose_file`, `folders.nested_ignored` | warning | A page outside the numbered folders, or a folder nested deeper than chapter → section; not in the outline. |
 | `source.bad_metadata` | warning | `<name>_metadata.json` isn't valid JSON; title taken from the folder name. |
 | `structure.duplicate_title` | info | Two chapters with the same title (distinct ids). |
 | `structure.empty_element` | info | A chapter with no content. |
