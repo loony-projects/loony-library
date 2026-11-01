@@ -54,7 +54,7 @@ need extending.
   the PDF converter.
 
 ### Content quality
-- [ ] **P1** Run the code unmangler during import for books whose code is in
+- [x] **P1** Run the code unmangler during import for books whose code is in
   plain paragraphs (Build-LLM-1); currently a separate manual step.
 - [x] **P1** Missing images reported with file and line (about 10 across
   current books), and found by name anywhere under the book folder.

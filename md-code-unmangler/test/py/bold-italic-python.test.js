@@ -82,3 +82,15 @@ test('prose with a bolded keyword stays prose', () => {
   const prose = '**For** example, the tokenizer splits words into subwords.';
   assert.equal(run(prose), prose);
 });
+
+test('a callout marker (#A ... #E) ends its comment: the code after it stays code', () => {
+  const input = '**def** decode(self, ids): #D text = " ".join([self.int\\_to\\_str[i] **for** i **in** ids]) text = re.sub(r\'\\s+([,.?!"()\\\'])\', r\'\\1\', text) #E **return** text';
+  assert.equal(run(input), [
+    '```py',
+    'def decode(self, ids):  #D',
+    '    text = " ".join([self.int_to_str[i] for i in ids])',
+    '    text = re.sub(r\'\\s+([,.?!"()\\\'])\', r\'\\1\', text)  #E',
+    '    return text',
+    '```',
+  ].join('\n'));
+});

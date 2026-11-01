@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import "dotenv/config";
 import { copyImages, describeImages, loadIntoPostgres } from "./load.js";
-import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown, bookDirFromEnv, UsageError } from "@loony-library/markdown-parser";
+import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown, bookDirFromEnv, UsageError, unmangleBook } from "@loony-library/markdown-parser";
 
 // Usage: migrate.js [--title T] [--slug S] [--author A] [--category <slug>]
 //                   [--publish] [--reload | --reset] [--allow-errors] [--out book-output.md]
@@ -40,7 +40,10 @@ async function main() {
   if (!process.env.DATABASE_URL) {
     throw new UsageError("DATABASE_URL is not set in book-import/.env (see .env.example)");
   }
-  const data = parseBookDirectory(bookDirFromEnv(), args.overrides);
+  const bookDir = bookDirFromEnv();
+  const unmangled = unmangleBook(bookDir);
+  if (unmangled) console.log(`Code unmangled into ${unmangled.output}\n  ${unmangled.summary.join("\n  ")}`);
+  const data = parseBookDirectory(bookDir, args.overrides);
   // Flags win over the book's book.json.
   data.book.category = args.category ?? data.book.category;
   const publish = args.publish || data.book.publish === true;

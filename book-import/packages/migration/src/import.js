@@ -9,7 +9,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
-import { parseBookDirectory, countBySeverity, UsageError } from "@loony-library/markdown-parser";
+import { parseBookDirectory, countBySeverity, UsageError, unmangleBook } from "@loony-library/markdown-parser";
 import { copyImages, loadIntoPostgres } from "./load.js";
 
 function parseArgs(argv) {
@@ -43,6 +43,8 @@ const countSections = (chapters) => chapters.reduce((n, c) => n + c.sections.fil
 function survey(dir, loaded) {
   const row = { dir, manifest: fs.existsSync(path.join(dir, "book.json")) };
   try {
+    const unmangled = unmangleBook(dir);
+    if (unmangled) row.unmangled = true;
     const data = parseBookDirectory(dir);
     const severity = countBySeverity(data.diagnostics);
     const images = copyImages(data.chapters, data.book, { dryRun: true });
@@ -69,7 +71,7 @@ function printTable(rows, root) {
   const cell = (v, w) => String(v ?? "").slice(0, w).padEnd(w);
   console.log(`${cell("book", 44)} ${cell("action", 7)} ${"chap".padStart(4)} ${"sect".padStart(5)} ${"code".padStart(5)} ${"warn".padStart(4)} ${"err".padStart(3)} ${"img?".padStart(4)}  notes`);
   for (const r of rows) {
-    const notes = [r.problem, r.manifest ? null : "no book.json: title from the folder, loads as a draft"].filter(Boolean).join("; ");
+    const notes = [r.problem, r.unmangled ? "code unmangled" : null, r.manifest ? null : "no book.json: title from the folder, loads as a draft"].filter(Boolean).join("; ");
     console.log(
       `${cell(path.relative(root, r.dir) || path.basename(r.dir), 44)} ${cell(r.action, 7)} ${String(r.chapters ?? "-").padStart(4)} ${String(r.sections ?? "-").padStart(5)} ${String(r.code ?? "-").padStart(5)} ${String(r.warnings ?? "-").padStart(4)} ${String(r.errors ?? "-").padStart(3)} ${String(r.missingImages ?? "-").padStart(4)}  ${notes}`
     );

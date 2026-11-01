@@ -126,9 +126,13 @@ Markdown doesn't say, so `npm run load` / `npm run reload` need no flags:
 
 Fields (all optional): `title`, `slug`, `author`, `publisher`, `isbn`,
 `edition`, `year`, `language`, `series`, `volume`, `category` (a category
-slug), `publish` (load as published, not draft), and `source` - the Markdown
-folder to read, relative to `book.json` (default `markdown/`; e.g. the code
-unmangler's `markdown-cleaned/`). It's found whether `UPLOAD_BOOK_PATH` is
+slug), `publish` (load as published, not draft), `source` - the Markdown
+folder to read, relative to `book.json` (default `markdown/`) - and
+`unmangle` (`"py"`, `"rust"`, `"js"`, `"java"` or `"sql"`): for a book whose
+code came out of the PDF as plain paragraphs, `dry-run`, `load`/`reload` and
+`import` first regenerate `markdown-cleaned/` from `markdown/` with
+[md-code-unmangler](../md-code-unmangler/) (deleting the old copy) and read
+that; `markdown/` itself is never changed. It's found whether `UPLOAD_BOOK_PATH` is
 the book folder or its `markdown/` folder. Flags (`--title`, `--slug`,
 `--author`, `--category`, `--publish`) win over it; without it, title and
 slug come from `<name>_metadata.json` or the folder name. An unknown field or

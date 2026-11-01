@@ -54,6 +54,10 @@ function commentEnd(src, start, depth, flattened) {
   const newline = src.indexOf('\n', start);
   const lineEnd = newline < 0 ? src.length : newline;
   if (!flattened) return lineEnd;
+  // A callout marker ("#A", "#B" ... pointing at the book's margin notes) is
+  // the whole comment: what follows it is code ("#E return text").
+  const callout = /^#[A-Z]{1,2}(?=\s|$)/.exec(src.slice(start, lineEnd));
+  if (callout) return start + callout[0].length;
   const words = [...src.slice(start + 1, lineEnd).matchAll(/\S+/g)];
   for (let w = 1; w < words.length; w++) {
     if (resumesCode(words[w][0], words[w + 1]?.[0], depth)) return start + 1 + words[w].index;

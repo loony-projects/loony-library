@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import "dotenv/config";
-import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics, renderBookMarkdown, bookDirFromEnv, UsageError } from "./index.js";
+import { parseBookDirectory, analyzeCodeBlocks, summarize, printDiagnostics, renderBookMarkdown, bookDirFromEnv, UsageError, unmangleBook } from "./index.js";
 
 // Usage: cli.js [--out book-output.md] [--title T] [--slug S] [--no-analyze] [--all-diagnostics]
 // The book's Markdown directory is UPLOAD_BOOK_PATH in .env (see .env.example).
@@ -22,7 +22,10 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const outline = parseBookDirectory(bookDirFromEnv(), args.overrides);
+  const bookDir = bookDirFromEnv();
+  const unmangled = unmangleBook(bookDir);
+  if (unmangled) console.log(`Code unmangled into ${unmangled.output}\n  ${unmangled.summary.join("\n  ")}`);
+  const outline = parseBookDirectory(bookDir, args.overrides);
   console.log(`${outline.book.title} (${outline.book.slug}) from ${outline.book.sourceDir}`);
   if (!outline.chapters.length) {
     // No contents page (or none of its chapters could be located): report

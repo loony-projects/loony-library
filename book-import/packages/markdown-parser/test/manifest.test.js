@@ -63,3 +63,25 @@ test("a bad book.json is a usage error naming the problem", () => {
   assert.throws(() => parseBookDirectory(bookFolder({ year: "2022" })), /"year" must be a whole number/);
   assert.throws(() => parseBookDirectory(bookFolder({ source: "nope" })), /"source" is not a directory/);
 });
+
+test('"unmangle": "py" regenerates markdown-cleaned/ with md-code-unmangler, which is then read; markdown/ is untouched', async () => {
+  const { unmangleBook } = await import("../src/index.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "md-unmangle-"));
+  const page = path.join(dir, "markdown", "01_Chapter_One", "p1.md");
+  fs.mkdirSync(path.dirname(page), { recursive: true });
+  const original = "## Chapter One\n\nThe code:\n\n**def** greet(name): **return** f\"hi {name}\"\n";
+  fs.writeFileSync(page, original);
+  fs.writeFileSync(path.join(dir, "book.json"), JSON.stringify({ title: "Unmangled", unmangle: "py" }));
+  // A stale page from an earlier run is removed.
+  fs.mkdirSync(path.join(dir, "markdown-cleaned", "99_Old"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "markdown-cleaned", "99_Old", "p9.md"), "## Old\n");
+
+  const result = unmangleBook(dir);
+  assert.equal(result.output, path.join(dir, "markdown-cleaned"));
+  assert.equal(fs.readFileSync(page, "utf8"), original);
+  assert.ok(!fs.existsSync(path.join(dir, "markdown-cleaned", "99_Old")));
+  const outline = parseBookDirectory(dir);
+  assert.equal(path.basename(outline.book.sourceDir), "markdown-cleaned");
+  const code = outline.chapters[0].sections[0].blocks.find((b) => b.block_type === "code");
+  assert.equal(code?.content.code, 'def greet(name):\n    return f"hi {name}"');
+});

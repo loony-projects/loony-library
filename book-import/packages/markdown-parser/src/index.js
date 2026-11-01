@@ -30,6 +30,7 @@ export { renderBookMarkdown } from "./bookOutput.js";
 export { ROLES, normalizeRole } from "./roles.js";
 export { parseHeadingText } from "./headings.js";
 export { findManifest, readManifest, ManifestError, MANIFEST_FIELDS } from "./manifest.js";
+export { unmangleBook } from "./unmangle.js";
 
 // A book is a directory of Markdown - typically pdf-to-md output
 // (<name>_page_NNNN.md files, <name>_metadata.json, images/). Everything
@@ -109,10 +110,15 @@ export function parseBookDirectory(dir, overrides = {}) {
   }
   // book.json, next to markdown/: metadata, and which Markdown folder to read.
   const manifest = findManifest(sourceDir);
-  if (manifest?.data.source && manifest.bookDir === sourceDir) {
-    sourceDir = path.resolve(manifest.bookDir, manifest.data.source);
+  const source = manifest?.data.source ?? (manifest?.data.unmangle ? "markdown-cleaned" : null);
+  if (source && manifest.bookDir === sourceDir) {
+    sourceDir = path.resolve(manifest.bookDir, source);
     if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
-      throw new ManifestError(`${manifest.file}: "source" is not a directory: ${sourceDir}`);
+      throw new ManifestError(
+        manifest.data.unmangle && !manifest.data.source
+          ? `${manifest.file}: ${sourceDir} doesn't exist yet - the import commands create it ("unmangle")`
+          : `${manifest.file}: "source" is not a directory: ${sourceDir}`
+      );
     }
   }
   // pdf-to-md lays a book out as <book>/{<book>.pdf, markdown/, pages/}:
