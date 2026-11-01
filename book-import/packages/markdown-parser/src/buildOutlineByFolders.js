@@ -43,7 +43,7 @@ import { slugify } from "./buildOutlineByToc.js";
 const NUMBERED = /^(\d{2,3})_(.+)$/;
 const CHAPTER_DIR = /^Chapter_(\d+)_(.+)$/i;
 const FRONT = /^front_?(?:pages?|matter)$/i;
-const BACK = /^(?:back|end)_?(?:pages?|matter)$/i;
+const BACK = /^(?:back|end|last)_?(?:pages?|matter)$/i;
 const PART_LABEL = /^Part_([A-Za-z0-9]+)_(.+)$/;
 const APPENDIX = /^Appendix_([A-Za-z0-9]+)(?:_|\.|$)/;
 
@@ -358,13 +358,18 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const front = division === "front";
     const { sections } = matterElement(division, entry);
     let pendingBlank = [];
-    const folderTitle = titleFromName(bare(entry));
+    const folderTitle = titleFromName(bare(entry)).replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2");
     let items;
     if (!isDir) items = [{ name: entry, dir: false, top: true }];
     else if (!isMatter(entry)) items = [{ name: entry, dir: true, top: true, title: folderTitle, role: folderRole(entry) }];
     else {
+      // Every subfolder counts here, numbered or not (00_FrontPages/Chapters/).
       const inner = entriesOf(path.join(root, entry));
-      items = [...inner.files.map((f) => ({ name: f, dir: false, ...(NUMBERED.test(f) ? {} : { title: folderTitle }) })), ...inner.dirs.map((d) => ({ name: d, dir: true }))].sort((x, y) => byName(x.name, y.name));
+      const subdirs = fs.readdirSync(path.join(root, entry), { withFileTypes: true }).filter((e) => e.isDirectory() && allPageFiles(root, path.join(entry, e.name)).length).map((e) => e.name);
+      items = [...inner.files.map((f) => ({ name: f, dir: false, ...(NUMBERED.test(f) ? {} : { title: folderTitle }) })), ...subdirs.map((d) => ({ name: d, dir: true, ...(NUMBERED.test(d) ? {} : { role: folderRole(d) ?? undefined }) }))];
+      // An unnumbered subfolder sorts where its pages fall among the page files.
+      const sortName = (it) => (it.dir && !NUMBERED.test(it.name) ? path.basename(allPageFiles(root, path.join(entry, it.name))[0]) : it.name);
+      items.sort((x, y) => byName(sortName(x), sortName(y)));
     }
     for (const item of items) {
       const rel = item.top ? entry : path.join(entry, item.name);

@@ -233,3 +233,23 @@ test("role folders, chapter labels, part banners inside chapters, 00_ introducti
     ["paragraph", "Intro."],
   ], "the part banner stays; the Chapter 1 label and title are consumed");
 });
+
+test("LastPages is back matter; an unnumbered subfolder of the front pages is a section placed by its pages", () => {
+  const dir = bookTree({
+    "00_FrontPages/book_page_0001.md": "# Learning TypeScript\n",
+    "00_FrontPages/Chapters/book_page_0002.md": "# Table of Contents\n\n1. **Basics** — 1\n",
+    "00_FrontPages/Preface/book_page_0004.md": "## Preface\n\nWhy.\n",
+    "00_FrontPages/book_page_0003.md": "Dedication.\n",
+    "01_Basics/book_page_0005.md": "## Basics\n\nText.\n",
+    "LastPages/book_page_0006.md": "### any\n\nA top type.\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => c.role), ["front_matter", "chapter", "back_matter"]);
+  assert.deepEqual(result.chapters[0].sections.map((s) => [s.role, s.title]), [
+    ["section", "Front Pages"],
+    ["toc", "Chapters"],
+    ["section", "Front Pages"],
+    ["preface", "Preface"],
+  ]);
+  assert.deepEqual(result.chapters[2].sections.map((s) => s.title), ["Last Pages"]);
+});
