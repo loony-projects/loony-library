@@ -243,6 +243,38 @@ function chapterContent(root, relDir, diagnostics) {
   };
 }
 
+// Parts the book's own contents page lists ("Part I. Data Structures",
+// "PART II Functions as Objects"): part title key -> numeral. The contents
+// page is a front matter file or folder named Contents, Table_of_Contents or
+// Chapters.
+const CONTENTS_NAME = /^(contents|table_of_contents|chapters|toc)$/i;
+const PART_LINE = /^(?:#+\s*)?[*_]*part\s+([ivxlc]+|\d+)[*_]*[.,:]?\s+[*_]*(.+?)[*_\s]*$/i;
+function partsListed(root, listed) {
+  const files = [];
+  const visit = (rel, inContents) => {
+    const full = path.join(root, rel);
+    if (fs.statSync(full).isFile()) {
+      if (inContents || CONTENTS_NAME.test(bare(path.basename(rel)))) files.push(full);
+      return;
+    }
+    for (const e of fs.readdirSync(full)) {
+      if (e === "images") continue;
+      const child = path.join(rel, e);
+      if (fs.statSync(path.join(root, child)).isDirectory()) visit(child, inContents || CONTENTS_NAME.test(bare(e)));
+      else if (e.endsWith(".md")) visit(child, inContents);
+    }
+  };
+  for (const e of listed) if (matterOf(e.name) === "front") visit(e.name, CONTENTS_NAME.test(bare(e.name)));
+  const found = new Map();
+  for (const file of files) {
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      const m = line.trim().match(PART_LINE);
+      if (m) found.set(key(m[2].replace(/\s+\d+$/, "")), m[1].toUpperCase());
+    }
+  }
+  return found;
+}
+
 export function buildOutlineByFolders(root, { diagnostics }) {
   const top = topEntries(root);
   for (const file of top.loose) {
@@ -259,6 +291,8 @@ export function buildOutlineByFolders(root, { diagnostics }) {
 
   const elements = [];
   const parts = new Map(); // part label -> part element
+  const listedParts = partsListed(root, top.listed);
+  let currentPart = null; // a part found from the contents page: chapters after it belong to it
   let chapterNumber = 0;
 
   // A chapter, appendix or part from its folder name and content.
@@ -274,8 +308,9 @@ export function buildOutlineByFolders(root, { diagnostics }) {
 
     const appendixLabel = (name.match(APPENDIX) ?? firstText.match(/^appendix\s+([a-z0-9]+)\b/i))?.[1]?.toUpperCase() ?? null;
     // A part: a Part_ folder (or one titled by its part heading) holding just the part's page.
-    const isPart = /^part\b/i.test(firstText) && !units.length && (Boolean(partLabel) || key(firstText).includes(key(folderTitle)));
-    const { title: heading, label } = opening.length ? chapterHeadings(opening, [name.replace(/_+/g, " "), folderTitle]) : { title: null, label: null };
+    const listedPart = !units.length && !chapterDir ? listedParts.get(key(folderTitle)) : undefined;
+    const isPart = listedPart !== undefined || (/^part\b/i.test(firstText) && !units.length && (Boolean(partLabel) || key(firstText).includes(key(folderTitle))));
+    const { title: heading, label } = opening.length ? chapterHeadings(opening, [name.replace(/_+/g, " "), folderTitle, folderTitle.replace(/^Appendix\s+[A-Za-z0-9]+\.?\s+/i, "")]) : { title: null, label: null };
     const introduction = /^0+_/.test(dir) && !chapterDir;
 
     let role;
@@ -283,13 +318,13 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     let title;
     if (isPart) {
       role = "part";
-      number = partLabel;
+      number = partLabel ?? listedPart ?? firstText.match(/^part\s+([ivxlc]+|\d+)\b/i)?.[1]?.toUpperCase() ?? null;
       title = folderTitle;
     } else if (appendixLabel) {
       role = "appendix";
       number = appendixLabel;
       const m = heading && headingText(heading).match(/^appendix\s+[a-z0-9]+\b[.:]?\s*(.+)$/i);
-      title = m ? m[1].trim() : folderTitle.replace(/^Appendix\s+[A-Za-z0-9]+\.?\s*/i, "");
+      title = m ? m[1].trim() : heading ? headingText(heading) : folderTitle.replace(/^Appendix\s+[A-Za-z0-9]+\.?\s*/i, "");
     } else {
       role = chapterDir || label ? "chapter" : introduction ? "introduction" : normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
       // The book's own number - "Chapter 4" label, "CHAPTER 1 ..." or "1 ..." title,
@@ -323,7 +358,9 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     }
 
     const element = { role, number, slug: uniqueSlug(title), title, level: null, sort_order: 0, position, partId: null, sections };
-    if (role === "part") parts.set(partLabel, element);
+    if (role === "part" && partLabel) parts.set(partLabel, element);
+    else if (role === "part") currentPart = element;
+    else if (role === "chapter" && !partLabel && currentPart) element.partRef = currentPart;
     else if (partLabel && parts.has(partLabel)) element.partRef = parts.get(partLabel);
     return element;
   }

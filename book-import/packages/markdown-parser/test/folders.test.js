@@ -253,3 +253,28 @@ test("LastPages is back matter; an unnumbered subfolder of the front pages is a 
   ]);
   assert.deepEqual(result.chapters[2].sections.map((s) => s.title), ["Last Pages"]);
 });
+
+test("parts listed on the contents page: their folders are parts and the chapters after them belong to them", () => {
+  const dir = bookTree({
+    "01_FrontPages/01_Contents.md": "## Contents\n\n## **Part I. Getting Started**\n\n1. A Q&A Session 3\n\n## Part II. Types and Operations\n",
+    "02_Getting_Started/p_page_0010.md": "**PART I**\n\n## **Getting Started**\n",
+    "03_A_QA_Session/p_page_0011.md": "## **CHAPTER 1 A Q&A Session**\n\nWhy Python.\n",
+    "03_A_QA_Session/01_Why/p_page_0012.md": "## Why\n\nBecause.\n",
+    "04_Types_and_Operations/p_page_0013.md": "## **Types and Operations**\n",
+    "05_Object_Types/p_page_0014.md": "## **CHAPTER 2 Object Types**\n\nTypes.\n",
+    "06_Appendix_B_The_Python_3_3_Launcher/p_page_0015.md": "## **The Python 3.3 Launcher**\n\nWindows.\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["part", "I", "Getting Started"],
+    ["chapter", "1", "A Q&A Session"],
+    ["part", "II", "Types and Operations"],
+    ["chapter", "2", "Object Types"],
+    ["appendix", "B", "The Python 3.3 Launcher"],
+  ]);
+  const [, partOne, one, partTwo, two, appendix] = result.chapters;
+  assert.equal(one.partId, partOne.id);
+  assert.equal(two.partId, partTwo.id);
+  assert.equal(appendix.partId, null);
+});
