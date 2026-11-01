@@ -2,10 +2,12 @@
 # Starts loony-auth, the backend and/or the frontend in the background.
 #
 #   scripts/start.sh            # all three
-#   scripts/start.sh auth       # loony-auth's auth-api (port from LOONY_AUTH_URL
-#                               #   in backend/.env, default 8450), after applying
-#                               #   its pending database migrations
-#   scripts/start.sh backend    # API only   (PORT from backend/.env, default 4000)
+#   scripts/start.sh auth       # loony-auth's auth-api (LOONY_AUTH_PORT, default
+#                               #   8450), after applying its pending database
+#                               #   migrations
+#   scripts/start.sh backend    # API (PORT from backend/.env, default 4000), which
+#                               #   also serves the built frontend - rebuilt here
+#                               #   when its source changed - for the public site
 #   scripts/start.sh frontend   # Vite dev server (FRONTEND_PORT, default 5173)
 #
 # loony-auth is found at LOONY_AUTH_DIR (default ~/projects/loony-auth); sign-in
@@ -26,13 +28,9 @@ backend_port() {
 }
 frontend_port() { echo "${FRONTEND_PORT:-5173}"; }
 auth_dir() { echo "${LOONY_AUTH_DIR:-$HOME/projects/loony-auth}"; }
-auth_port() {
-  local url
-  url="$(grep -E '^LOONY_AUTH_URL=' "$ROOT/backend/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]"' || true)"
-  url="${url:-http://localhost:8450}"
-  local port="${url##*:}"
-  echo "${port%%/*}"
-}
+# loony-auth's local port (LOONY_AUTH_URL in backend/.env is its public URL,
+# e.g. https://auth.lovegood.in, so it doesn't say).
+auth_port() { echo "${LOONY_AUTH_PORT:-8450}"; }
 
 listening() { lsof -ti:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
@@ -102,8 +100,25 @@ start_auth() {
   START_TIMEOUT=300 start auth "$dir" "$port" "http://localhost:$port/ready" env SERVER_PORT="$port" scripts/auth-api.sh
 }
 
+# The frontend build the backend serves on its own origin (the public site,
+# https://books.lovegood.in): API calls relative to the page. Rebuilt when
+# anything it's built from is newer than the last build.
+build_frontend() {
+  local dir="$ROOT/frontend" index="$ROOT/frontend/dist/index.html"
+  [ -d "$dir/node_modules" ] || return 0
+  if [ -f "$index" ] && [ -z "$(find "$dir/src" "$dir/public" "$dir/index.html" "$dir"/vite.config.* "$dir/package.json" -newer "$index" -print -quit 2>/dev/null)" ]; then
+    return 0
+  fi
+  echo "frontend: building for the backend to serve (log: .run/frontend-build.log)"
+  if ! (cd "$dir" && VITE_API_URL= npm run build) >"$RUN_DIR/frontend-build.log" 2>&1; then
+    echo "frontend: build failed - see .run/frontend-build.log" >&2
+    return 1
+  fi
+}
+
 start_backend() {
   local port
+  build_frontend || true
   port="$(backend_port)"
   start backend "$ROOT/backend" "$port" "http://localhost:$port/api/health" npm start
 }

@@ -61,6 +61,49 @@ it isn't found, the library starts anyway, without sign-in. Plain
 `scripts/stop.sh` stops loony-auth only if `start.sh` started it, since other
 apps may share it.
 
+## Public site through a Cloudflare tunnel
+
+The library is published at **https://books.lovegood.in** and loony-auth at
+**https://auth.lovegood.in**, both through the Cloudflare tunnel in
+`~/.cloudflared/config.yml`:
+
+```yaml
+  - hostname: auth.lovegood.in
+    service: http://127.0.0.1:8450      # loony-auth's auth-api
+  - hostname: books.lovegood.in
+    service: http://127.0.0.1:4000      # this backend: frontend + API + images
+```
+
+One origin serves everything: the backend serves the built frontend
+(`frontend/dist`, built with an empty `VITE_API_URL` so API calls are relative)
+next to `/api` and `/images`, so the session cookie is first-party. `start.sh`
+rebuilds `frontend/dist` whenever the frontend source is newer than the last
+build. The backend trusts `X-Forwarded-Proto` from cloudflared on loopback, so
+cookies get `Secure` over HTTPS.
+
+`backend/.env` for both local and public use:
+
+```sh
+LOONY_AUTH_URL=https://auth.lovegood.in    # loony-auth's issuer (JWT_ISSUER in its .env)
+CORS_ORIGIN=http://localhost:5173,http://localhost:4173,https://books.lovegood.in
+OAUTH_REDIRECT_URI=http://localhost:4000/api/auth/callback,https://books.lovegood.in/api/auth/callback
+```
+
+A sign-in uses the callback on the origin it came in on. Every callback must
+also be registered for the app in loony-auth (its `application_redirect_uris`
+table - it has no API to add one to an existing app):
+
+```sh
+psql "<loony-auth DATABASE_URL>" -c "insert into application_redirect_uris (application_id, redirect_uri)
+  values ('<CLIENT_ID>', 'https://books.lovegood.in/api/auth/callback') on conflict do nothing"
+```
+
+After editing the tunnel config, restart cloudflared (it reads the config only
+at startup), and point DNS at the tunnel once:
+`cloudflared tunnel route dns <tunnel-id> books.lovegood.in`.
+
+The Vite dev server (5173) stays local-only: never expose it through the tunnel.
+
 ## Architecture recap
 
 ```

@@ -20,13 +20,9 @@ backend_port() {
   echo "${port:-4000}"
 }
 frontend_port() { echo "${FRONTEND_PORT:-5173}"; }
-auth_port() {
-  local url
-  url="$(grep -E '^LOONY_AUTH_URL=' "$ROOT/backend/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]"' || true)"
-  url="${url:-http://localhost:8450}"
-  local port="${url##*:}"
-  echo "${port%%/*}"
-}
+# loony-auth's local port (LOONY_AUTH_URL in backend/.env is its public URL,
+# e.g. https://auth.lovegood.in, so it doesn't say).
+auth_port() { echo "${LOONY_AUTH_PORT:-8450}"; }
 
 listeners() { lsof -ti:"$1" -sTCP:LISTEN 2>/dev/null || true; }
 

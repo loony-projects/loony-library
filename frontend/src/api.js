@@ -1,4 +1,6 @@
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// The API's origin. Empty means the same origin as the page: the build the
+// backend serves itself (https://books.lovegood.in). Unset: the dev backend.
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
 async function get(path) {
   const res = await fetch(`${API_URL}${path}`, { credentials: "include" });

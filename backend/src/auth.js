@@ -11,16 +11,18 @@ import { pool } from "./db.js";
 export const authRouter = Router();
 export const digest = (value) => createHash("sha256").update(value).digest("hex");
 const b64url = (buf) => buf.toString("base64url");
-const secure = () => (process.env.NODE_ENV === "production" ? "; Secure" : "");
+// Secure in production, and whenever the request came over HTTPS (through
+// the Cloudflare tunnel: app.js trusts its X-Forwarded-Proto).
+const secure = (req) => (process.env.NODE_ENV === "production" || req?.secure ? "; Secure" : "");
 // Not plain `session`: cookies ignore the port, so loony-auth's own
 // `session` cookie on the same host would overwrite this one (and vice versa).
 const SESSION_COOKIE = "library_session";
-const cookie = (token, age) =>
-  `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}${secure()}`;
+const cookie = (req, token, age) =>
+  `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}${secure(req)}`;
 // Short-lived state/PKCE/nonce for one sign-in round trip, scoped to the
 // auth routes only.
-const txCookie = (value, age) =>
-  `oauth_tx=${value}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=${age}${secure()}`;
+const txCookie = (req, value, age) =>
+  `oauth_tx=${value}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=${age}${secure(req)}`;
 const readCookie = (req, name) =>
   req.headers.cookie
     ?.split(";")
@@ -34,13 +36,31 @@ export const frontendOrigins = () =>
     .split(",")
     .map((s) => s.trim().replace(/\/+$/, ""))
     .filter(Boolean);
-// The frontend a sign-in started from (its Referer), if it's an allowed one.
+// The origin this request reached us on, as the browser sees it
+// (https://books.lovegood.in through the tunnel, http://localhost:4000 locally).
+const publicOrigin = (req) => `${req.protocol}://${req.get("host")}`;
+// The frontend a sign-in started from (its Referer), if it's an allowed one;
+// else this server itself when it serves the frontend on an allowed origin.
 function startingFrontend(req) {
   try {
     const origin = new URL(req.headers.referer).origin;
     if (frontendOrigins().includes(origin)) return origin;
   } catch {}
+  if (frontendOrigins().includes(publicOrigin(req))) return publicOrigin(req);
   return frontendOrigins()[0];
+}
+
+// OAUTH_REDIRECT_URI may list several callbacks, comma-separated - one per
+// origin the library is reached on - each registered with loony-auth. A
+// sign-in uses the one on the origin it came in on, else the first.
+const redirectUris = () =>
+  (process.env.OAUTH_REDIRECT_URI || "http://localhost:4000/api/auth/callback")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+function redirectUriFor(req) {
+  const uris = redirectUris();
+  return uris.find((uri) => new URL(uri).origin === publicOrigin(req)) ?? uris[0];
 }
 
 function config() {
@@ -49,8 +69,6 @@ function config() {
     clientId: process.env.CLIENT_ID,
     tenantId: process.env.TENANT_ID,
     secret: process.env.SECRET_KEY,
-    redirectUri:
-      process.env.OAUTH_REDIRECT_URI || "http://localhost:4000/api/auth/callback",
   };
   if (!cfg.clientId || !cfg.tenantId || !cfg.secret)
     throw Object.assign(
@@ -117,19 +135,20 @@ authRouter.get("/auth/login", async (req, res, next) => {
       verifier: b64url(randomBytes(32)),
       nonce: b64url(randomBytes(32)),
       frontend: startingFrontend(req),
+      redirectUri: redirectUriFor(req),
     };
     const url = new URL(meta.authorization_endpoint);
     url.search = new URLSearchParams({
       response_type: "code",
       client_id: cfg.clientId,
-      redirect_uri: cfg.redirectUri,
+      redirect_uri: tx.redirectUri,
       scope: "openid profile email",
       state: tx.state,
       nonce: tx.nonce,
       code_challenge: b64url(createHash("sha256").update(tx.verifier).digest()),
       code_challenge_method: "S256",
     }).toString();
-    res.setHeader("Set-Cookie", txCookie(b64url(Buffer.from(JSON.stringify(tx))), 600));
+    res.setHeader("Set-Cookie", txCookie(req, b64url(Buffer.from(JSON.stringify(tx))), 600));
     res.redirect(303, url.toString());
   } catch (e) {
     next(e);
@@ -148,8 +167,11 @@ authRouter.get("/auth/callback", async (req, res, next) => {
   const frontend = frontendOrigins().includes(tx?.frontend)
     ? tx.frontend
     : frontendOrigins()[0];
+  // Exactly the redirect_uri the authorization request used, re-checked
+  // against the configured list.
+  const redirectUri = redirectUris().includes(tx?.redirectUri) ? tx.redirectUri : redirectUris()[0];
   const fail = (reason) => {
-    res.setHeader("Set-Cookie", txCookie("", 0));
+    res.setHeader("Set-Cookie", txCookie(req, "", 0));
     res.redirect(303, `${frontend}/?auth_error=${encodeURIComponent(reason)}`);
   };
   if (!tx || !sameString(req.query.state, tx.state)) return fail("invalid_state");
@@ -170,7 +192,7 @@ authRouter.get("/auth/callback", async (req, res, next) => {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code: req.query.code,
-        redirect_uri: cfg.redirectUri,
+        redirect_uri: redirectUri,
         code_verifier: tx.verifier,
       }),
     });
@@ -220,7 +242,7 @@ authRouter.get("/auth/callback", async (req, res, next) => {
       "insert into sessions values($1,$2,now()+interval '30 days')",
       [digest(token), rows[0].id],
     );
-    res.setHeader("Set-Cookie", [txCookie("", 0), cookie(token, 2592000)]);
+    res.setHeader("Set-Cookie", [txCookie(req, "", 0), cookie(req, token, 2592000)]);
     res.redirect(303, `${frontend}/`);
   } catch (e) {
     if (typeof e.code === "string" && e.code.startsWith("ERR_JW")) {
@@ -242,7 +264,7 @@ authRouter.post("/auth/logout", async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
-  res.setHeader("Set-Cookie", cookie("", 0));
+  res.setHeader("Set-Cookie", cookie(req, "", 0));
   let logoutUrl;
   try {
     const cfg = config();
@@ -256,7 +278,7 @@ authRouter.post("/auth/logout", async (req, res, next) => {
         client_id: cfg.clientId,
         // Must share an origin with the registered redirect URI (loony-auth
         // checks this), so it lives next to /auth/callback.
-        post_logout_redirect_uri: new URL("/api/auth/logged-out", cfg.redirectUri).toString(),
+        post_logout_redirect_uri: new URL("/api/auth/logged-out", redirectUriFor(req)).toString(),
         state: origin,
       }).toString();
       logoutUrl = url.toString();
