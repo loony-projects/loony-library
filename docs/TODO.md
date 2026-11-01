@@ -127,9 +127,9 @@ need extending.
 
 ## 3. Search
 
-- [ ] **P1** Replace `ilike '%…%'` over `content::text` (about 65,000
+- [x] **P1** Replace `ilike '%…%'` over `content::text` (about 65,000
   blocks) with ranked full-text search: `websearch_to_tsquery` + `ts_rank`.
-- [ ] **P1** Highlighted snippets with `ts_headline`.
+- [x] **P1** Highlighted snippets with `ts_headline`.
 - [ ] **P2** `pg_trgm` indexes for section titles and code identifiers
   (`asyncio.gather`, `Arc::clone`, `useEffect`).
 - [ ] **P2** Filters: this book / chapter / category, prose only / code

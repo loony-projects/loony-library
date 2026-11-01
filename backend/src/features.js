@@ -1,4 +1,5 @@
 import { imageType } from "./imageType.js";
+import { HEADLINE_OPTIONS, plainSnippet } from "./searchSnippet.js";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -96,10 +97,41 @@ r.get(
       .trim()
       .slice(0, 200);
     if (!q) return res.json({ results: [] });
+    // Across books: ranked full-text matches, one per section (its best
+    // block), plus sections whose title contains the words; a title match
+    // ranks higher. Snippets are plain text - the library page highlights
+    // the query itself.
     const { rows } = await pool.query(
-      `select distinct s.id section_id,s.title,b.slug book_slug,b.title book_title,left(cb.content->>'text',240) snippet from sections s join chapters c on c.id=s.chapter_id join books b on b.id=c.book_id left join content_blocks cb on cb.section_id=s.id where (${publishedSQL} or $2) and (cb.tsv @@ plainto_tsquery('english',$1) or s.title ilike '%'||$1||'%' or cb.content::text ilike '%'||$1||'%') limit 50`,
-      [q, req.user?.role === "editor"],
+      `with query as (select websearch_to_tsquery('english', $1) q),
+       visible as (
+         select s.id, s.title, s.role, b.slug book_slug, b.title book_title
+         from sections s join chapters c on c.id = s.chapter_id join books b on b.id = c.book_id
+         where (${publishedSQL} or $2)
+       ),
+       text_hits as (
+         select distinct on (v.id) v.id, cb.content->>'text' as text, ts_rank(cb.tsv, query.q) as rank
+         from content_blocks cb join visible v on v.id = cb.section_id cross join query
+         where cb.tsv @@ query.q
+         order by v.id, rank desc
+       ),
+       title_hits as (
+         select id from visible where title ilike '%' || $1 || '%'
+       )
+       select v.id section_id, v.title, v.book_slug, v.book_title,
+              (coalesce(t.rank, 0) + case when th.id is not null then 1 else 0 end)
+                -- contents and index pages mention everything: rank them last
+                * case when v.role in ('toc', 'index') then 0.1 else 1 end as score,
+              case when t.text is not null then ts_headline('english', t.text, query.q, $3) end as snippet
+       from visible v
+       left join text_hits t on t.id = v.id
+       left join title_hits th on th.id = v.id
+       cross join query
+       where t.id is not null or th.id is not null
+       order by score desc
+       limit 50`,
+      [q, req.user?.role === "editor", HEADLINE_OPTIONS],
     );
+    for (const row of rows) row.snippet = plainSnippet(row.snippet);
     res.json({ results: rows });
   }),
 );
