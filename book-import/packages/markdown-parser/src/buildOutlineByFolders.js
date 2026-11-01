@@ -156,7 +156,7 @@ const CHAPTER_LABEL = /^(?:chap(?:ter|\.)?\s+)?(\d+)\.?$/i;
 // with the "Chapter 4" label heading just before it, if any. A part banner
 // may come first ("Part I Day 1: Morning", then "Chapter 3", "Welcome to Day 1").
 function chapterHeadings(opening, names) {
-  const firsts = opening.flatMap((p) => p.items.filter((item) => item.kind === "heading")).slice(0, 4);
+  const firsts = opening.flatMap((p) => p.items.filter((item) => item.kind === "heading")).slice(0, 6);
   for (let i = 0; i < firsts.length; i++) {
     const title = names.map((n) => openingHeading(opening, n, firsts[i])).find(Boolean);
     if (!title) continue;
@@ -247,8 +247,10 @@ function chapterContent(root, relDir, diagnostics) {
 // "PART II Functions as Objects"): part title key -> numeral. The contents
 // page is a front matter file or folder named Contents, Table_of_Contents or
 // Chapters.
-const CONTENTS_NAME = /^(contents|table_of_contents|chapters|toc)$/i;
-const PART_LINE = /^(?:#+\s*)?[*_]*part\s+([ivxlc]+|\d+)[*_]*[.,:]?\s+[*_]*(.+?)[*_\s]*$/i;
+const CONTENTS_NAME = /^(contents|brief_contents|table_of_contents|chapters|toc)$/i;
+// "Part I. Data Structures", "## **PART II Functions as Objects**", and the
+// run-together "PART 1CLASSIFICATION .......1" of some contents pages.
+const PART_LINE = /^(?:#+\s*)?[*_]*part\s+(?:([ivxlc]+|\d+)[*_]*[.,:]?\s+|(\d+)(?=[a-z]))[*_]*(.+?)[*_\s]*$/i;
 function partsListed(root, listed) {
   const files = [];
   const visit = (rel, inContents) => {
@@ -269,7 +271,7 @@ function partsListed(root, listed) {
   for (const file of files) {
     for (const line of fs.readFileSync(file, "utf8").split("\n")) {
       const m = line.trim().match(PART_LINE);
-      if (m) found.set(key(m[2].replace(/\s+\d+$/, "")), m[1].toUpperCase());
+      if (m) found.set(key(m[3].replace(/\s*\.{3,}.*$/, "").replace(/\s+\(?\d+\)?$/, "")), (m[1] ?? m[2]).toUpperCase());
     }
   }
   return found;
@@ -294,6 +296,55 @@ export function buildOutlineByFolders(root, { diagnostics }) {
   const listedParts = partsListed(root, top.listed);
   let currentPart = null; // a part found from the contents page: chapters after it belong to it
   let chapterNumber = 0;
+
+  // A part banner at the start of a chapter folder ("Part 1: Asynchronous
+  // Programming Fundamentals", or a part the contents page lists, like
+  // "Classification"), before the chapter's own title heading: the banner
+  // and what follows it up to that title become a part element, and the
+  // chapter keeps the rest.
+  function splitPartBanner(dir, name, content) {
+    const chapterDir = name.match(CHAPTER_DIR);
+    if (!content.opening.length || name.match(PART_LABEL) || name.match(APPENDIX)) return null;
+    const folderTitle = titleFromName(chapterDir ? chapterDir[2] : name);
+    const { title, label } = chapterHeadings(content.opening, [name.replace(/_+/g, " "), folderTitle]);
+    const stopAt = label ?? title;
+    const headings = content.opening.flatMap((p) => p.items.filter((item) => item.kind === "heading"));
+    const banner = headings[0];
+    if (!stopAt || !banner || banner === stopAt) return null;
+    const text = headingText(banner);
+    const said = text.match(/^part\s+([ivxlc]+|\d+)\b[.:]?\s*(.*)$/i);
+    const listed = listedParts.get(key(text));
+    if (!said && listed === undefined) return null;
+    // "Part XV" alone: the part's title is the heading after it.
+    const titleHeading = said && !said[2].trim() && headings[1] && headings[1] !== stopAt ? headings[1] : null;
+
+    const partPages = [];
+    const rest = [];
+    let reached = false;
+    for (const page of content.opening) {
+      const cut = reached ? 0 : page.items.indexOf(stopAt);
+      if (cut === -1) partPages.push(page);
+      else {
+        reached = true;
+        if (cut > 0) partPages.push({ ...page, items: page.items.slice(0, cut) });
+        rest.push(cut > 0 ? { ...page, items: page.items.slice(cut) } : page);
+      }
+    }
+    const partTitle = (titleHeading ? headingText(titleHeading) : said ? said[2] : text).trim() || text;
+    const part = {
+      role: "part",
+      number: said ? said[1].toUpperCase() : listed,
+      slug: uniqueSlug(partTitle),
+      title: partTitle,
+      level: null,
+      sort_order: 0,
+      position: { file: dir },
+      partId: null,
+      sections: [section({ role: "body", title: partTitle, depth: 1, file: partPages[0].file, position: { file: partPages[0].file }, blocks: blocksOf(partPages, new Set([banner, titleHeading])) })],
+    };
+    currentPart = part;
+    return { part, content: { ...content, opening: rest } };
+  }
 
   // A chapter, appendix or part from its folder name and content.
   function chapterElement(dir, name, { opening, units }) {
@@ -382,7 +433,13 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const division = matterOf(entry);
     if (!division) {
       const name = CHAPTER_DIR.test(entry) ? entry : entry.replace(NUMBERED, "$2");
-      elements.push(chapterElement(entry, name, chapterContent(root, entry, diagnostics)));
+      let content = chapterContent(root, entry, diagnostics);
+      const split = splitPartBanner(entry, name, content);
+      if (split) {
+        elements.push(split.part);
+        content = split.content;
+      }
+      elements.push(chapterElement(entry, name, content));
       continue;
     }
     // Front and back pages: titled from the file name. Consecutive files

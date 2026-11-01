@@ -67,6 +67,7 @@ markdown/
 - The folders are the structure; no contents page is needed, and headings never create chapters or sections.
 - Titles and numbers come from each folder's own title heading — the first heading of its first page, when it names the folder (`## 1.1 What is an LLM?` for `01_What_is_an_LLM`, `## A.1 What is PyTorch`, `## Appendix A. Introduction to PyTorch`). That heading is consumed; every other heading stays in place as a `subheading`. Without a matching heading the folder name is used (`_` → space).
 - Chapters are numbered 1, 2, 3… in folder order; appendices get their letter.
+- Parts: a `Part_` folder, a folder named like a part the contents page lists, or a part banner at the start of a chapter folder - a first heading "Part 1: …", "Part XV" (titled by the next heading), or a part the contents page lists ("Classification" for "PART 1CLASSIFICATION") - before the chapter's own title. The banner and the text up to the chapter title become the part; the chapters after it belong to it.
 - File names inside front/back pages give those sections their role (`Copyright`, `Glossary`, `About_the_Author`).
 - Reported, not used: `.md` files loose in `markdown/` (`folders.loose_file`) and folders nested deeper than chapter → section (`folders.nested_ignored`).
 

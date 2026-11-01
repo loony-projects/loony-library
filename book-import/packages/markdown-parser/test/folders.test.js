@@ -208,7 +208,7 @@ test("role folders, chapter labels, part banners inside chapters, 00_ introducti
       "Preface/book_page_0004.md": "## Preface\n\nWhy.\n",
       "Chapters/book_page_0003.md": "# Table of Contents\n\n1. **Basics** — 1\n",
       "00_Welcome/book_page_0005.md": "## Welcome\n\nHello.\n",
-      "01_Basics/book_page_0006.md": "## Part I Day 1\n\n## Chapter 1\n\n## Basics\n\nIntro.\n",
+      "01_Basics/book_page_0006.md": "## Part I Day 1\n\nThis part covers the basics.\n\n## Chapter 1\n\n## Basics\n\nIntro.\n",
       "01_Basics/01_Threads/book_page_0007.md": "## 1.1 Threads\n\nSpawn.\n",
       "02_References/book_page_0008.md": "## Chapter 2\n\n## References\n\nBorrow.\n",
       "Index_Symbols/book_page_0009.md": "## Index\n\nA\n",
@@ -221,17 +221,18 @@ test("role folders, chapter labels, part banners inside chapters, 00_ introducti
   assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
     ["front_matter", null, "Front Matter"],
     ["introduction", null, "Welcome"],
+    ["part", "I", "Day 1"],
     ["chapter", "1", "Basics"],
     ["chapter", "2", "References"],
     ["back_matter", null, "Back Matter"],
   ]);
-  const [front, , basics, , back] = result.chapters;
+  const [front, , part, basics, references, back] = result.chapters;
   assert.deepEqual(front.sections.map((s) => [s.role, s.title]), [["front_matter", "Front Matter"], ["toc", "Chapters"], ["preface", "Preface"]]);
   assert.deepEqual(back.sections.map((s) => [s.role, s.title]), [["index", "Index Symbols"], ["back_matter", "Back Matter"]]);
-  assert.deepEqual(basics.sections[0].blocks.map((b) => [b.block_type, b.content.text]), [
-    ["subheading", "Part I Day 1"],
-    ["paragraph", "Intro."],
-  ], "the part banner stays; the Chapter 1 label and title are consumed");
+  assert.deepEqual(part.sections[0].blocks.map((b) => b.content.text), ["This part covers the basics."], "a part banner at the start of a chapter folder is the part's page");
+  assert.deepEqual(basics.sections[0].blocks.map((b) => [b.block_type, b.content.text]), [["paragraph", "Intro."]], "the Chapter 1 label and title are consumed");
+  assert.equal(basics.partId, part.id);
+  assert.equal(references.partId, part.id, "chapters after it belong to the part");
 });
 
 test("LastPages is back matter; an unnumbered subfolder of the front pages is a section placed by its pages", () => {
@@ -277,4 +278,21 @@ test("parts listed on the contents page: their folders are parts and the chapter
   assert.equal(one.partId, partOne.id);
   assert.equal(two.partId, partTwo.id);
   assert.equal(appendix.partId, null);
+});
+
+test("a part the contents page lists can open a chapter folder without saying \"Part\"", () => {
+  const dir = bookTree({
+    "00_Front_Matter/02_Brief_contents.md": "## **PART 1CLASSIFICATION .........1**\n\n## **PART 2FORECASTING VALUES ......151**\n",
+    "Chapter_01_Machine_learning_basics/00_Introduction.md": "## *Classification*\n\nThe first part is on supervised learning.\n\n## *Machine learning basics*\n\nWhat it is.\n",
+    "Chapter_02_Regression/00_Introduction.md": "## *Forecasting values*\n\nThis part covers regression.\n\n## *Regression*\n\nLines.\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["part", "1", "Classification"],
+    ["chapter", "1", "Machine learning basics"],
+    ["part", "2", "Forecasting values"],
+    ["chapter", "2", "Regression"],
+  ]);
+  assert.deepEqual(result.chapters[2].sections[0].blocks.map((b) => b.content.text), ["What it is."]);
 });

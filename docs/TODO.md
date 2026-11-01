@@ -39,7 +39,7 @@ need extending.
   GitBook layouts), e.g. the Rust Book, Comprehensive Rust source.
 
 ### Structure detection
-- [ ] **P1** Part pages inside a chapter folder (Async Rust, ML in Action)
+- [x] **P1** Part pages inside a chapter folder (Async Rust, ML in Action)
   should become the part, not a subheading in the chapter's opening.
 - [ ] **P2** Use the contents page as a cross-check in folder mode: warn
   when a listed chapter or section has no folder, or a folder isn't listed.
@@ -98,6 +98,9 @@ need extending.
   scroll spy.
 - [ ] **P2** Progress bar per section and per chapter; % read on the
   sidebar's chapters.
+- [ ] **P2** Group chapters under their parts in the sidebar: store each
+  chapter's part (`chapters.part_id`; the parser already knows it) and
+  nest them in TocTree - parts show as entries between chapters today.
 - [ ] **P2** Breadcrumbs: Book › Part › Chapter › Section.
 - [ ] **P2** Deep links to a paragraph or code block (copy link on hover).
 - [ ] **P2** Remember scroll position inside a section, not just the section.
