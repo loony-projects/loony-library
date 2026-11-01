@@ -85,7 +85,8 @@ async function loadIntoPostgres(data) {
     await client.query("begin");
 
     if (data.reset) {
-      await client.query("delete from books where title = $1", [data.book.title]);
+      // By slug, which is unique: titles aren't (two editions of a book).
+      await client.query("delete from books where slug = $1", [data.book.slug]);
     }
 
     let categoryId = null;

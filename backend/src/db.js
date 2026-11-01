@@ -3,25 +3,14 @@ import "dotenv/config";
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
-const bookIdBySlug = new Map();
-
-// Book ids don't change once loaded - resolve each slug once per process
-// lifetime and reuse it instead of hitting the DB on every request. Throws
-// on an unknown slug so routes can turn it into a 404.
-export function getBookIdBySlug(slug) {
-  if (!bookIdBySlug.has(slug)) {
-    bookIdBySlug.set(
-      slug,
-      pool.query("select id from books where slug = $1", [slug]).then((r) => {
-        if (!r.rows[0]) {
-          bookIdBySlug.delete(slug); // don't cache a miss - the book may load later
-          throw new Error(`No book with slug "${slug}"`);
-        }
-        return r.rows[0].id;
-      }),
-    );
-  }
-  return bookIdBySlug.get(slug);
+// Looked up on every request (slug is uniquely indexed): a book reloaded by
+// book-import gets a new id, and an editor can rename a slug, so a cached id
+// would go stale until a restart. Throws on an unknown slug so routes can
+// turn it into a 404.
+export async function getBookIdBySlug(slug) {
+  const { rows } = await pool.query("select id from books where slug = $1", [slug]);
+  if (!rows[0]) throw new Error(`No book with slug "${slug}"`);
+  return rows[0].id;
 }
 
 // Express middleware: resolves req.params.slug to req.bookId, or responds
