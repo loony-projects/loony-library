@@ -327,6 +327,56 @@
     line-height: 1.65;
     @apply scrollbar-thin;
   }
+  /* A code block with its language and a copy button above the code. */
+  .reading .block-code-frame {
+    margin: 1.6em 0;
+    border-radius: var(--radius);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .reading .block-code-frame .block-code {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding-top: 0.4em;
+  }
+  .reading .block-code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem 0 1.25em;
+    font-family: var(--font-sans, inherit);
+    font-size: 0.72rem;
+    color: var(--muted-foreground);
+  }
+  .reading .block-code-lang {
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .reading .block-code-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: calc(var(--radius) - 2px);
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+  }
+  .reading .block-code-copy:hover,
+  .reading .block-code-copy:focus-visible {
+    color: var(--foreground);
+    background: var(--background);
+  }
+  .reading .block-code-copy svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+  @media print {
+    .reading .block-code-bar { display: none; }
+  }
   .reading pre code {
     font-family: inherit;
     background: none;

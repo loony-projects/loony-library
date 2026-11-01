@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
+import { Check, Copy } from "lucide-react";
 import { api } from "../api";
 import { highlightCode } from "../highlight";
 import { renderBlock, renderInline } from "../renderMarkdown";
@@ -66,13 +68,68 @@ function CodeBlock({ content }) {
     content.code,
     content.language || content.lang,
   );
+  // Only the language the book gave: highlight.js's guess for an unlabelled
+  // block is fine for colours but too unreliable to print.
+  const given = content.language || content.lang;
+  const label = given ? LANGUAGE_NAMES[given.toLowerCase()] ?? given : null;
   return (
-    <pre className="block-code">
-      <code
-        className={`hljs language-${language}`}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    </pre>
+    <figure className="block-code-frame">
+      <div className="block-code-bar">
+        <span className="block-code-lang">{label}</span>
+        <CopyButton text={content.code} />
+      </div>
+      <pre className="block-code">
+        <code
+          className={`hljs language-${language}`}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </pre>
+    </figure>
+  );
+}
+
+const LANGUAGE_NAMES = {
+  py: "Python", python: "Python", rs: "Rust", rust: "Rust",
+  js: "JavaScript", javascript: "JavaScript", jsx: "JSX",
+  ts: "TypeScript", typescript: "TypeScript", tsx: "TSX",
+  sh: "Shell", bash: "Shell", shell: "Shell", console: "Shell", zsh: "Shell",
+  c: "C", cpp: "C++", "c++": "C++", go: "Go", java: "Java", kotlin: "Kotlin",
+  kt: "Kotlin", sql: "SQL", html: "HTML", css: "CSS", json: "JSON",
+  yaml: "YAML", yml: "YAML", toml: "TOML", xml: "XML", erlang: "Erlang",
+  text: "Text", plaintext: "Text", txt: "Text", markdown: "Markdown", md: "Markdown",
+};
+
+// Copies the block's code - its source text, not the highlighted HTML.
+// navigator.clipboard needs a secure context (https, localhost); elsewhere
+// a hidden textarea and execCommand do it.
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setCopied(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }
+  const Icon = copied ? Check : Copy;
+  return (
+    <button type="button" className="block-code-copy" onClick={copy} aria-label={copied ? "Copied" : "Copy code"}>
+      <Icon aria-hidden="true" />
+      <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
+    </button>
   );
 }
 

@@ -30,7 +30,7 @@ Sign-in goes through loony-auth, so its `auth-api` has to be running (default `h
 ```sh
 cd frontend
 npm install
-cp .env.example .env   # VITE_API_URL, defaults to http://localhost:4000
+# no env file needed: the dev server's API is http://localhost:4000 (see .env.example)
 npm run dev              # http://localhost:5173
 ```
 

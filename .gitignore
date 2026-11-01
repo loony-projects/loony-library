@@ -8,6 +8,7 @@ frontend/dist/
 /.env
 backend/.env
 frontend/.env
+frontend/.env.*.local
 book-import/.env
 
 # Generated parser output (see docs/migration.md)

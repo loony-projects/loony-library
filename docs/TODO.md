@@ -82,8 +82,9 @@ need extending.
 ## 2. Reading experience
 
 ### Code
-- [ ] **P1** Syntax highlighting (Shiki) matching each colour preset.
-- [ ] **P1** Copy button and language label on every code block.
+- [x] **P1** Syntax highlighting matching the colour presets (already there:
+  highlight.js with theme tokens, light and dark).
+- [x] **P1** Copy button and language label on every code block.
 - [ ] **P2** Wrap / horizontal scroll toggle; line numbers on long listings.
 - [ ] **P2** "Listing 3.2" captions linked to the code they caption.
 - [ ] **P2** Run Python snippets in the browser (Pyodide) and Rust/TS via
