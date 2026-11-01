@@ -2,8 +2,10 @@
 
 Turns a book's markdown source into rows of the Postgres schema defined in
 [backend/migrations/001-schema.sql](../backend/migrations/001-schema.sql). An
-npm workspace of two packages:
+npm workspace of three packages:
 
+- [packages/organizer](./packages/organizer/) — splits a book's chapter
+  folders into section folders from its own contents list (`npm run organize`).
 - [packages/markdown-parser](./packages/markdown-parser/) — markdown → outline
   (`{ book, chapters, glossary, symbols, codeBlocks, diagnostics }`), no
   database needed. Also used by the backend's section editor.
@@ -35,5 +37,8 @@ syntax analysis), `--all-diagnostics` (print info-level diagnostics too).
 `load`/`reload` flags: `--title`, `--slug`, `--author`, `--category <slug>`,
 `--allow-errors` (load even if the parse reported errors), `--out <file>`,
 `--publish` (make the book and its sections visible to readers right away -
-otherwise they're drafts). After reloading a book that was already loaded,
-restart the backend: it caches book ids by slug.
+otherwise they're drafts). The backend picks up a reloaded book right away.
+
+`organize` flags: `--apply` (otherwise only the plan is printed), `--show`,
+`--contents <path>`, `--pdf-contents <first>-<last>` - see
+[../docs/migration.md](../docs/migration.md#splitting-chapters-into-sections-npm-run-organize).

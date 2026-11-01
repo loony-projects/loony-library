@@ -70,6 +70,42 @@ markdown/
 - File names inside front/back pages give those sections their role (`Copyright`, `Glossary`, `About_the_Author`).
 - Reported, not used: `.md` files loose in `markdown/` (`folders.loose_file`) and folders nested deeper than chapter → section (`folders.nested_ignored`).
 
+### Splitting chapters into sections: `npm run organize`
+
+A book organized into chapter folders of pages, but without section folders
+yet, gets them from **[packages/organizer](../book-import/packages/organizer/)**:
+
+```sh
+cd book-import
+npm run organize                       # the plan for the book in UPLOAD_BOOK_PATH; nothing changes
+npm run organize -- --show             # ... listing every section and the page/line it starts at
+npm run organize -- --apply            # back up markdown/, split, verify
+npm run organize -- --pdf-contents 7-12 --apply   # contents list read from those PDF pages
+```
+
+- Sections come from the book's own contents list: the Markdown list
+  pdf-to-md writes in a `Chapters/` or `Contents/` folder (top level or one
+  down, e.g. `00_FrontPages/Chapters/`; `--contents <path>` names another).
+  A chapter's least-indented entries are its sections; deeper entries are
+  subsections and stay inside them.
+- When the contents page lost its indentation (a flattened table),
+  `--pdf-contents <first>-<last>` reads those pages of the book's PDF with
+  `pdftotext -layout` instead.
+- Each section is located as a heading in its chapter folder, near its
+  printed page (the PDF page offset is worked out from the chapter folders).
+  Listed sections with no matching heading are reported and left in place.
+- A chapter folder the contents list doesn't cover - or every chapter, in a
+  book without one - uses its numbered `N.1`, `N.2` … headings (`A.1` in
+  appendices).
+- `--apply` first writes `markdown-backup-before-sections.tar.gz` next to
+  `markdown/` (never overwriting an earlier one). Text is never changed: a
+  page moves whole into its section folder, or is cut at the line where a
+  section starts, both pieces keeping the page's file name; the chapter
+  folder keeps the opening. Every page is then checked to rejoin
+  byte-for-byte; a chapter that doesn't is restored exactly as it was.
+- Only chapter folders with page files and no section folders are touched,
+  so running it again does nothing.
+
 ## Chapters from the book's contents page
 
 Used for flat per-page Markdown (no numbered folders).
@@ -211,13 +247,11 @@ createdb loony_library
 (cd ../backend && npm run migrate)             # creates the schema (backend/migrations)
 cp .env.example .env   # set DATABASE_URL
 npm run load -- [--category <slug>] [--title T] [--author A]   # first load
-npm run reload                                  # re-parse + wipe-and-reload (deletes by title, cascades)
+npm run reload                                  # re-parse + wipe-and-reload (deletes by slug, cascades)
 # the book is always UPLOAD_BOOK_PATH in .env - change it there to switch books
 ```
 
 New books and their sections are drafts unless loaded with `--publish`.
-
-After a `reload`, restart the backend — book ids are memoized per-slug for the process lifetime, so it'll keep pointing at the deleted row until it's bounced (Docker: `docker compose restart backend`).
 
 ## Verified against the real source
 

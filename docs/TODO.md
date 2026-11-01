@@ -12,7 +12,7 @@ need extending.
 ## 1. Book import pipeline
 
 ### Tooling
-- [ ] **P1** Move section splitting into the repo: `npm run organize` reads
+- [x] **P1** Move section splitting into the repo: `npm run organize` reads
   the book's contents page, plans sections, backs up `markdown/`, splits
   chapter folders into section folders, and verifies every page rejoins
   byte-for-byte. (The scripts were throwaway and were lost once.)
