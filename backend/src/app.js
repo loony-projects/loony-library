@@ -9,6 +9,7 @@ import { router as categoriesRouter } from "./routes/categories.js";
 import { router as sectionsRouter } from "./routes/sections.js";
 import { router as searchRouter } from "./routes/search.js";
 import { router as referenceRouter } from "./routes/reference.js";
+import { router as importReportRouter } from "./routes/importReport.js";
 
 import { authenticate, authRouter, editor, frontendOrigins } from "./auth.js";
 import { featuresRouter, visibility } from "./features.js";
@@ -46,6 +47,7 @@ app.use("/api", (req, res, next) =>
     ? next()
     : editor(req, res, next),
 );
+app.use("/api", importReportRouter);
 app.use("/api", bookRouter);
 app.use("/api", categoriesRouter);
 app.use("/api", sectionsRouter);

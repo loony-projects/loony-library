@@ -79,6 +79,13 @@ accept signature-checked PNG/JPEG/WebP files up to 5 MB and insert Markdown
 at the cursor. Existing chapter/section deletion remains permanent and is
 confirmed separately; revision history restores content edits, not deletions.
 
+**Health** (editors, in a book's header) shows what book-import found the
+last time it loaded or reloaded the book: errors and warnings, images it
+couldn't find, sections with no content, and code that doesn't parse
+(counts, with the first 300 listed) - each linked to its section. The
+loader saves this in `import_reports` (migration 002); run `npm run
+migrate` in `backend/` first.
+
 ## Reading and export
 
 Sections have previous/next links in depth-first reading order. Keyboard

@@ -9,7 +9,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
-import { parseBookDirectory, countBySeverity, UsageError, unmangleBook } from "@loony-library/markdown-parser";
+import { parseBookDirectory, countBySeverity, UsageError, unmangleBook, analyzeCodeBlocks } from "@loony-library/markdown-parser";
 import { copyImages, loadIntoPostgres } from "./load.js";
 
 function parseArgs(argv) {
@@ -107,8 +107,9 @@ async function main() {
   for (const r of rows.filter((r) => r.action !== "skip")) {
     console.log(`\n== ${r.title} (${r.slug})`);
     try {
-      copyImages(r.data.chapters, r.data.book);
-      await loadIntoPostgres({ ...r.data, mode: r.action, publish: r.data.book.publish === true });
+      await analyzeCodeBlocks(r.data);
+      const images = copyImages(r.data.chapters, r.data.book);
+      await loadIntoPostgres({ ...r.data, images, mode: r.action, publish: r.data.book.publish === true });
     } catch (error) {
       failed++;
       console.error(`   failed: ${error instanceof UsageError ? error.message : error.stack}`);

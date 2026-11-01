@@ -102,6 +102,24 @@ test("API integration in isolated schema", async () => {
     );
     assert.equal(chapter.status, 201);
     const sid = chapter.data.section.id;
+    // Import health: the last import's issues, linked to their section.
+    await pool.query("update sections set source_file = '02_Chapter/p_page_0001.md' where id = $1", [sid]);
+    await pool.query(
+      `insert into import_reports (book_id, mode, stats, diagnostics, missing_images)
+       values ($1, 'load', '{"chapters": 1}', $2, $3)`,
+      [
+        bid,
+        JSON.stringify([{ severity: "warning", code: "folders.loose_file", message: "stray", file: "02_Chapter/p_page_0002.md", line: 3 }]),
+        JSON.stringify([{ src: "fig.png", file: "02_Chapter/p_page_0001.md", line: 7 }]),
+      ],
+    );
+    // Not for anonymous visitors (a draft book is hidden from them: 404).
+    assert.ok([403, 404].includes((await call("GET", `/books/${slug}/import-report`)).status));
+    const health = (await call("GET", `/books/${slug}/import-report`, undefined, cookie)).data;
+    assert.equal(health.report.stats.chapters, 1);
+    assert.equal(health.issues[0].section.id, sid, "a page in the section's folder belongs to it");
+    assert.equal(health.missingImages[0].section.id, sid);
+    assert.ok(health.emptySections.some((e) => e.id === sid), "a section with no blocks yet is listed");
     assert.equal(
       (
         await call(

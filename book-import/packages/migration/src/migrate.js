@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import "dotenv/config";
 import { copyImages, describeImages, loadIntoPostgres } from "./load.js";
-import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown, bookDirFromEnv, UsageError, unmangleBook } from "@loony-library/markdown-parser";
+import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown, bookDirFromEnv, UsageError, unmangleBook, analyzeCodeBlocks } from "@loony-library/markdown-parser";
 
 // Usage: migrate.js [--title T] [--slug S] [--author A] [--category <slug>]
 //                   [--publish] [--reload | --reset] [--allow-errors] [--out book-output.md]
@@ -62,9 +62,10 @@ async function main() {
     console.log(`Wrote ${args.out}`);
   }
 
+  await analyzeCodeBlocks(data); // code syntax errors, for the import report
   const images = copyImages(data.chapters, data.book);
   console.log(describeImages(images));
-  await loadIntoPostgres({ ...data, mode: args.mode, publish });
+  await loadIntoPostgres({ ...data, images, mode: args.mode, publish });
 }
 
 main().catch((err) => {

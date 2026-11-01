@@ -123,6 +123,7 @@ export const api = {
   search: (slug, q) =>
     get(`/api/books/${slug}/search?q=${encodeURIComponent(q)}`),
   glossary: (slug) => get(`/api/books/${slug}/glossary`),
+  importReport: (slug) => get(`/api/books/${slug}/import-report`),
   symbols: (slug) => get(`/api/books/${slug}/symbols`),
   imageUrl: (path) => `${API_URL}/images/${path}`,
   coverUrl: (filename) => `${API_URL}/covers/${filename}`,

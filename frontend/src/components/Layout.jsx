@@ -10,7 +10,7 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-import { ArrowLeft, BookText, Info, ListTree, Menu, Plus } from "lucide-react";
+import { ArrowLeft, BookText, HeartPulse, Info, ListTree, Menu, Plus } from "lucide-react";
 import { api } from "../api";
 import TocTree from "./TocTree";
 import SearchBox from "./SearchBox";
@@ -329,10 +329,12 @@ export default function Layout() {
   }
 
   // Keyboard: j/k next/previous section, / search, t contents, ? help.
-  const currentSectionId = location.pathname.match(/\/sections\/([^/]+)/)?.[1] ?? null;
   function goToSection(step) {
     const sections = sectionsInOrder(toc);
     if (!sections.length) return;
+    // From the address bar at keypress time, not the last render: a second
+    // key pressed right after the first must start from where that one went.
+    const currentSectionId = window.location.pathname.match(/\/sections\/([^/]+)/)?.[1] ?? null;
     const i = sections.findIndex((s) => s.id === currentSectionId);
     const target = i === -1 ? (step > 0 ? sections[0] : null) : sections[i + step];
     if (target) navigate(`/${bookSlug}/sections/${target.id}`);
@@ -447,6 +449,16 @@ export default function Layout() {
               {book?.title}
             </p>
             <div className="flex items-center gap-1">
+              {editor && (
+                <Tooltip content="What the last import found">
+                  <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground">
+                    <Link to={`/${bookSlug}/health`}>
+                      <HeartPulse />
+                      <span className="hidden sm:inline">Health</span>
+                    </Link>
+                  </Button>
+                </Tooltip>
+              )}
               {editor && toc && (
                 <Tooltip content="Edit & reorder contents">
                   <Button variant="ghost" size="sm" onClick={() => setOutlineOpen(true)} className="text-muted-foreground hover:text-foreground">

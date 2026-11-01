@@ -9,6 +9,7 @@ import Library from "./components/Library";
 import Home from "./components/Home";
 import SectionPage from "./components/SectionPage";
 import GlossaryPage from "./components/GlossaryPage";
+import ImportHealth from "./components/ImportHealth";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
               <Route index element={<Home />} />
               <Route path="sections/:id" element={<SectionPage />} />
               <Route path="glossary" element={<GlossaryPage />} />
+              <Route path="health" element={<ImportHealth />} />
             </Route>
           </Routes>
         </TooltipProvider>

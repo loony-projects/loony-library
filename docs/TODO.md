@@ -202,7 +202,7 @@ need extending.
 
 ## 8. Editors and admin
 
-- [ ] **P1** Import-health page per book: diagnostics, missing images, code
+- [x] **P1** Import-health page per book: diagnostics, missing images, code
   syntax errors, sections with no content.
 - [ ] **P2** Upload a book from the browser (zip of `markdown/`), run the
   dry-run, show the outline, then publish.

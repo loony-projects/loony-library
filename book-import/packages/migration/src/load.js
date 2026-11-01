@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { UsageError } from "@loony-library/markdown-parser";
+import { UsageError, countBlocks, countBySeverity } from "@loony-library/markdown-parser";
 import { snapshot, restore, describeReport, readingOrder } from "./reload.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -226,6 +226,7 @@ export async function loadIntoPostgres(data) {
     }
 
     const report = saved ? await restore(client, bookId, saved, newChapters) : null;
+    const reportSaved = await saveImportReport(client, bookId, data, inPlace ? "reload" : data.mode === "reset" ? "reset" : "load", report);
 
     await client.query("commit");
     const status = fields[9];
@@ -234,6 +235,7 @@ export async function loadIntoPostgres(data) {
         (status === "published" ? "published." : "a draft - publish it in the app, or reload with --publish.")
     );
     if (report) console.log(describeReport(report));
+    if (!reportSaved) console.log("(No import report saved: run `npm run migrate` in backend/ for the Import health page.)");
   } catch (err) {
     await client.query("rollback");
     throw err;
@@ -242,3 +244,42 @@ export async function loadIntoPostgres(data) {
   }
 }
 
+
+// Code that doesn't parse is common in books (REPL sessions, fragments), so
+// only this many are kept; the counts cover all of them.
+const SYNTAX_ERRORS_KEPT = 300;
+
+// The editors' "Import health" record for this load (import_reports, one row
+// per book). Skipped, returning false, on a database without the table.
+async function saveImportReport(client, bookId, data, mode, readerData) {
+  const {
+    rows: [{ exists }],
+  } = await client.query("select to_regclass('import_reports') is not null as exists");
+  if (!exists) return false;
+  const { sections, blocks } = countBlocks(data.chapters);
+  const byCode = {};
+  for (const d of data.diagnostics) byCode[d.code] = (byCode[d.code] ?? 0) + 1;
+  const stats = {
+    chapters: data.chapters.length,
+    sections,
+    blocks,
+    codeBlocks: data.codeBlocks?.length ?? 0,
+    glossary: data.glossary.length,
+    symbols: data.symbols.length,
+    bySeverity: countBySeverity(data.diagnostics),
+    byCode,
+  };
+  const kept = [
+    ...data.diagnostics.filter((d) => d.severity !== "info"),
+    ...data.diagnostics.filter((d) => d.code === "code.syntax_error").slice(0, SYNTAX_ERRORS_KEPT),
+  ];
+  await client.query(
+    `insert into import_reports (book_id, mode, source_dir, stats, diagnostics, missing_images, reader_data)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     on conflict (book_id) do update set loaded_at = now(), mode = excluded.mode, source_dir = excluded.source_dir,
+       stats = excluded.stats, diagnostics = excluded.diagnostics, missing_images = excluded.missing_images,
+       reader_data = excluded.reader_data`,
+    [bookId, mode, data.book.sourceDir, stats, JSON.stringify(kept), JSON.stringify(data.images?.missing ?? []), readerData]
+  );
+  return true;
+}
