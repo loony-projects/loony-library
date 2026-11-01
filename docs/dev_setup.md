@@ -41,16 +41,25 @@ Open `http://localhost:5173` — it lists every loaded book; picking one redirec
 Once both are installed and configured, from the repo root:
 
 ```sh
-scripts/start.sh            # backend + frontend in the background
-scripts/start.sh backend    # or just one: backend | frontend
-scripts/stop.sh             # stop both (or: scripts/stop.sh backend | frontend)
+scripts/start.sh            # loony-auth + backend + frontend in the background
+scripts/start.sh backend    # or just one: auth | backend | frontend
+scripts/stop.sh             # stop them (or: scripts/stop.sh auth | backend | frontend)
 ```
 
-`start.sh` waits until each app answers (`/api/health`, then the Vite page) and
-says where it's running; logs are in `.run/backend.log` and `.run/frontend.log`.
-Ports: backend `PORT` from `backend/.env` (4000), frontend `FRONTEND_PORT`
-(default 5173). Running `start.sh` again while an app is up does nothing;
-`stop.sh` also stops an app started by hand on those ports.
+`start.sh` waits until each app answers (loony-auth's `/ready`, `/api/health`,
+then the Vite page) and says where it's running; logs are in `.run/auth.log`,
+`.run/backend.log` and `.run/frontend.log`. Ports: loony-auth from
+`LOONY_AUTH_URL` in `backend/.env` (8450), backend `PORT` (4000), frontend
+`FRONTEND_PORT` (default 5173). Running `start.sh` again while an app is up does
+nothing; `stop.sh <app>` also stops an app started by hand on its port.
+
+loony-auth is found at `LOONY_AUTH_DIR` (default `~/projects/loony-auth`).
+Before starting it, `start.sh` applies its pending database migrations with
+`sqlx migrate run` - an unapplied migration makes its hosted sign-in page fail
+with "Something went wrong". Its first start compiles it (up to 5 minutes). If
+it isn't found, the library starts anyway, without sign-in. Plain
+`scripts/stop.sh` stops loony-auth only if `start.sh` started it, since other
+apps may share it.
 
 ## Architecture recap
 

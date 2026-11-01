@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Stops what scripts/start.sh started.
 #
-#   scripts/stop.sh             # both
+#   scripts/stop.sh             # frontend, backend, and loony-auth if start.sh started it
+#   scripts/stop.sh auth        # loony-auth, however it was started
 #   scripts/stop.sh backend
 #   scripts/stop.sh frontend
 #
@@ -19,6 +20,13 @@ backend_port() {
   echo "${port:-4000}"
 }
 frontend_port() { echo "${FRONTEND_PORT:-5173}"; }
+auth_port() {
+  local url
+  url="$(grep -E '^LOONY_AUTH_URL=' "$ROOT/backend/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]"' || true)"
+  url="${url:-http://localhost:8450}"
+  local port="${url##*:}"
+  echo "${port%%/*}"
+}
 
 listeners() { lsof -ti:"$1" -sTCP:LISTEN 2>/dev/null || true; }
 
@@ -57,14 +65,17 @@ stop() {
 }
 
 case "${1:-all}" in
+  auth) stop auth "$(auth_port)" ;;
   backend) stop backend "$(backend_port)" ;;
   frontend) stop frontend "$(frontend_port)" ;;
   all)
     stop frontend "$(frontend_port)"
     stop backend "$(backend_port)"
+    # loony-auth is shared with other apps: only stop it if start.sh started it.
+    if [ -f "$RUN_DIR/auth.pid" ]; then stop auth "$(auth_port)"; fi
     ;;
   *)
-    echo "usage: $0 [backend|frontend|all]" >&2
+    echo "usage: $0 [auth|backend|frontend|all]" >&2
     exit 2
     ;;
 esac

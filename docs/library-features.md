@@ -15,25 +15,32 @@ preserves existing books and sections as published. Their `created_at` values
 are the upgrade time because their original creation dates were never stored.
 Existing language values start as `und` (undetermined).
 
-Register through **Sign in / Create account**, then grant your account editor
-access from the server:
+Accounts live in loony-auth (`~/projects/loony-auth`):
+**Sign in** sends the browser to loony-auth's hosted sign-in page (OAuth 2.1
+authorization code + PKCE, OpenID Connect), and the first sign-in creates the
+library's own user row (matched by loony-auth's subject). loony-auth must be
+running - `scripts/start.sh` starts it. Grant an account editor access from
+the server once it has signed in:
 
 ```sh
 cd backend
 npm run editor -- your-email@example.com
 ```
 
-Registration always creates a reader. Only the operator's CLI can promote an
-account. Editors can edit every book. Anonymous visitors and readers cannot
+Every account starts as a reader. Only the operator's CLI can promote an
+account; the reader/editor role is local to the library, not stored in
+loony-auth. Editors can edit every book. Anonymous visitors and readers cannot
 create, update, upload, reorder, restore, publish, or delete library content.
 
 Set `CORS_ORIGIN` to the exact frontend origin (development default:
 `http://localhost:5173`). The frontend sends the HTTP-only session cookie on
 API requests. Production requires HTTPS and `NODE_ENV=production` for secure
 cookies. Serve the UI and API on the same site; cross-site cookie deployment
-is not configured. Passwords are salted with scrypt; sessions use random
-256-bit tokens stored as hashes and expire after 30 days. Authentication
-attempt limits are per API process.
+is not configured. The library never sees passwords: loony-auth handles
+them, MFA and account security (**Account security** in the account menu
+opens loony-auth's page). After verifying loony-auth's ID token, the library
+keeps its own session: random 256-bit tokens stored as hashes, expiring after
+30 days. **Sign out** ends both the library session and the loony-auth one.
 
 ## Discovery
 
@@ -100,7 +107,7 @@ npm --prefix frontend run lint
 
 Backend tests create and remove a uniquely named schema in the configured
 PostgreSQL database, preserving existing library tables. The test database role
-needs CREATE permission. Tests cover passwords, ZIP checksums, anonymous and
+needs CREATE permission. Tests cover the sign-in callback's state check, ZIP checksums, anonymous and
 reader/editor permissions, draft isolation (including ancestors), cross-book
 search, co-authors, private data ownership, reading progress, shelves/reviews,
 reordering, cross-chapter parent rejection, revision restore, exports, CSRF
