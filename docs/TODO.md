@@ -254,7 +254,7 @@ need extending.
 
 ## 12. Testing and CI
 
-- [ ] **P1** GitHub Actions: parser tests, backend tests (with a Postgres
+- [x] **P1** GitHub Actions: parser tests, backend tests (with a Postgres
   service), frontend lint + build on every push and PR.
 - [ ] **P1** Playwright smoke test: open a book, expand a chapter, read a
   section, search, sign in.
