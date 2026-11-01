@@ -34,7 +34,10 @@ npm run load -- --category programming-languages
 The book is always `UPLOAD_BOOK_PATH` from `.env`; to switch books, change it there.
 `dry-run` flags: `--out <file>`, `--title`, `--slug`, `--no-analyze` (skip
 syntax analysis), `--all-diagnostics` (print info-level diagnostics too).
-`load`/`reload` flags: `--title`, `--slug`, `--author`, `--category <slug>`,
+`load` adds a new book (it refuses a slug that's already loaded); `reload`
+updates a loaded one in place, keeping readers' annotations, reading
+positions, shelves and editors' revisions and drafts; `load -- --reset`
+deletes the book and loads it fresh. `load`/`reload` flags: `--title`, `--slug`, `--author`, `--category <slug>`,
 `--allow-errors` (load even if the parse reported errors), `--out <file>`,
 `--publish` (make the book and its sections visible to readers right away -
 otherwise they're drafts). The backend picks up a reloaded book right away.

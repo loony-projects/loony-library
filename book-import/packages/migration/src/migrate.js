@@ -3,23 +3,31 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import "dotenv/config";
 import pg from "pg";
+import { snapshot, restore, describeReport, readingOrder } from "./reload.js";
 import { parseBookDirectory, summarize, printDiagnostics, countBySeverity, renderBookMarkdown, bookDirFromEnv, UsageError } from "@loony-library/markdown-parser";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
 
 // Usage: migrate.js [--title T] [--slug S] [--author A] [--category <slug>]
-//                   [--publish] [--reset] [--allow-errors] [--out book-output.md]
+//                   [--publish] [--reload | --reset] [--allow-errors] [--out book-output.md]
+//   (none)    load a new book; stops if its slug is already loaded
+//   --reload  replace an already loaded book's contents in place, keeping its
+//             readers' shelves, reading positions, annotations and its
+//             revisions and section publish states (see reload.js)
+//   --reset   delete the book (and everything readers attached to it) and load
+//             it fresh
 // New books - and their sections - are drafts (hidden from readers) unless
 // --publish is given.
 // The book's Markdown directory is UPLOAD_BOOK_PATH in .env (see
 // .env.example). Title and slug are otherwise derived from the directory
 // (see parseBookDirectory).
 function parseArgs(argv) {
-  const args = { reset: false, out: null, allowErrors: false, category: null, overrides: {} };
+  const args = { mode: "load", out: null, allowErrors: false, category: null, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--reset") args.reset = true;
+    if (arg === "--reset") args.mode = "reset";
+    else if (arg === "--reload") args.mode = "reload";
     else if (arg === "--allow-errors") args.allowErrors = true;
     else if (arg === "--publish") args.publish = true;
     else if (arg === "--out") args.out = argv[++i];
@@ -84,10 +92,15 @@ async function loadIntoPostgres(data) {
   try {
     await client.query("begin");
 
-    if (data.reset) {
-      // By slug, which is unique: titles aren't (two editions of a book).
-      await client.query("delete from books where slug = $1", [data.book.slug]);
+    // By slug, which is unique: titles aren't (two editions of a book).
+    const {
+      rows: [existing],
+    } = await client.query("select id, status from books where slug = $1", [data.book.slug]);
+    if (existing && data.mode === "load") {
+      throw new UsageError(`"${data.book.slug}" is already loaded. Use \`npm run reload\` to update it in place (keeps readers' data), or --reset to replace it.`);
     }
+    if (existing && data.mode === "reset") await client.query("delete from books where id = $1", [existing.id]);
+    const inPlace = existing && data.mode === "reload";
 
     let categoryId = null;
     if (data.book.category) {
@@ -98,27 +111,50 @@ async function loadIntoPostgres(data) {
       categoryId = category.id;
     }
 
-    const {
-      rows: [{ id: bookId }],
-    } = await client.query(
-      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id, status, language, series, volume)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11,'und'),$12,$13) returning id`,
-      [
-        data.book.slug,
-        data.book.title,
-        data.book.author,
-        data.book.publisher,
-        data.book.isbn,
-        data.book.edition,
-        data.book.price,
-        data.book.published_year,
-        categoryId,
-        data.publish ? "published" : "draft",
-        data.book.language,
-        data.book.series,
-        data.book.volume,
-      ]
-    );
+    const fields = [
+      data.book.slug,
+      data.book.title,
+      data.book.author,
+      data.book.publisher,
+      data.book.isbn,
+      data.book.edition,
+      data.book.price,
+      data.book.published_year,
+      categoryId,
+      // In place, a book stays published once published.
+      data.publish || (inPlace && existing.status === "published") ? "published" : "draft",
+      data.book.language,
+      data.book.series,
+      data.book.volume,
+    ];
+    let bookId;
+    let saved = null;
+    if (inPlace) {
+      bookId = existing.id;
+      saved = await snapshot(client, bookId);
+      // Only what the source says is replaced: a cover, series or language set
+      // in the app stays unless the source gives one.
+      await client.query(
+        `update books set title=$2, author=coalesce($3,author), publisher=coalesce($4,publisher), isbn=coalesce($5,isbn),
+           edition=coalesce($6,edition), price=coalesce($7,price), published_year=coalesce($8,published_year),
+           category_id=coalesce($9,category_id), status=$10, language=coalesce($11,language), series=coalesce($12,series),
+           volume=coalesce($13,volume)
+         where slug=$1`,
+        fields
+      );
+      await client.query("delete from chapters where book_id = $1", [bookId]);
+      await client.query("delete from glossary_terms where book_id = $1", [bookId]);
+      await client.query("delete from symbols where book_id = $1", [bookId]);
+    } else {
+      ({
+        rows: [{ id: bookId }],
+      } = await client.query(
+        `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id, status, language, series, volume)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11,'und'),$12,$13) returning id`,
+        fields
+      ));
+    }
+    const newChapters = [];
 
     for (const chapter of data.chapters) {
       const {
@@ -128,6 +164,7 @@ async function loadIntoPostgres(data) {
          values ($1,$2,$3,$4,$5,$6) returning id`,
         [bookId, chapter.number, chapter.slug, chapter.title, chapter.sort_order, chapter.role]
       );
+      const inserted = [];
 
       const insertSection = async (section, parentId) => {
         const {
@@ -144,9 +181,11 @@ async function loadIntoPostgres(data) {
             section.sort_order,
             section.source_file,
             section.role,
-            data.publish ? "published" : "draft",
+            fields[9], // the book's status; a reload then restores each kept section's own
+
           ]
         );
+        inserted.push({ id: sectionId, parent_id: parentId, title: section.title, sort_order: section.sort_order });
 
         for (let i = 0; i < section.blocks.length; i++) {
           const block = section.blocks[i];
@@ -182,6 +221,7 @@ async function loadIntoPostgres(data) {
       for (const section of chapter.sections) {
         await insertSection(section, null);
       }
+      newChapters.push({ slug: chapter.slug, sections: readingOrder(inserted) });
     }
 
     for (const entry of data.glossary) {
@@ -199,11 +239,15 @@ async function loadIntoPostgres(data) {
       ]);
     }
 
+    const report = saved ? await restore(client, bookId, saved, newChapters) : null;
+
     await client.query("commit");
+    const status = fields[9];
     console.log(
-      `Loaded book "${data.book.title}" (id=${bookId}, slug=${data.book.slug}) into Postgres as ` +
-        (data.publish ? "published." : "a draft - publish it in the app, or reload with --publish.")
+      `${inPlace ? "Reloaded" : "Loaded"} book "${data.book.title}" (id=${bookId}, slug=${data.book.slug}) into Postgres as ` +
+        (status === "published" ? "published." : "a draft - publish it in the app, or reload with --publish.")
     );
+    if (report) console.log(describeReport(report));
   } catch (err) {
     await client.query("rollback");
     throw err;
@@ -237,7 +281,7 @@ async function main() {
   }
 
   resolveAndCopyImages(data.chapters, data.book);
-  await loadIntoPostgres({ ...data, reset: args.reset, publish });
+  await loadIntoPostgres({ ...data, mode: args.mode, publish });
 }
 
 main().catch((err) => {

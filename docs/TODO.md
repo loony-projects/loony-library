@@ -24,7 +24,7 @@ need extending.
   warnings, missing images), load the clean ones, list the rest.
 - [x] **P1** Fix `--reset`: it deletes by **title**, and the two Build-LLM
   editions share one, so resetting one deletes both. Delete by slug.
-- [ ] **P1** Reload a book in place (keep its id) so readers' progress,
+- [x] **P1** Reload a book in place (keep its id) so readers' progress,
   bookmarks, highlights and reviews survive a re-import. Match sections by
   source file + title.
 - [ ] **P2** `npm run survey -- <folder>`: read-only report of layout type

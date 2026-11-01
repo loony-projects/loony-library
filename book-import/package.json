@@ -13,7 +13,7 @@
     "organize": "node packages/organizer/src/cli.js",
     "dry-run": "node packages/markdown-parser/src/cli.js --out book-output.md",
     "load": "node packages/migration/src/migrate.js",
-    "reload": "node packages/migration/src/migrate.js --reset",
+    "reload": "node packages/migration/src/migrate.js --reload",
     "test": "npm test --workspaces --if-present"
   }
 }

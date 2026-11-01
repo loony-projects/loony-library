@@ -274,11 +274,24 @@ createdb loony_library
 (cd ../backend && npm run migrate)             # creates the schema (backend/migrations)
 cp .env.example .env   # set DATABASE_URL
 npm run load -- [--category <slug>] [--title T] [--author A]   # first load
-npm run reload                                  # re-parse + wipe-and-reload (deletes by slug, cascades)
+npm run reload                                  # update an already loaded book in place, keeping readers' data
+npm run load -- --reset                         # delete it (and readers' data) and load it fresh
 # the book is always UPLOAD_BOOK_PATH in .env - change it there to switch books
 ```
 
-New books and their sections are drafts unless loaded with `--publish`.
+New books and their sections are drafts unless loaded with `--publish` (or
+`"publish": true` in `book.json`). `load` refuses a slug that's already
+loaded.
+
+`reload` keeps the book row - its id, shelves, ratings, reviews, reading
+history, co-authors and cover - and replaces its chapters, sections,
+glossary and symbols. What pointed at an old section moves to the matching
+new one: annotations (bookmarks, highlights, notes), revisions and reading
+positions, plus each section's publish status and saved draft. A section
+matches by chapter slug + title (+ which occurrence of the title), else by
+its position when the chapter has as many sections as before; reader data
+of a section that's gone moves to its chapter's start (or the book's) and is
+counted in the report. A published book stays published.
 
 ## Verified against the real source
 
