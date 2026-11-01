@@ -52,7 +52,7 @@ export default function SearchBox({ onNavigate }) {
           {results.length === 0 && (
             <li className="px-3 py-3 text-sm text-muted-foreground">No matches</li>
           )}
-          {/* One result per matching block, so a section can appear more than once. */}
+          {/* One result per section (its best-matching block), best first. */}
           {results.map((r, i) => (
             <li key={`${r.section_id}-${i}`}>
               <button

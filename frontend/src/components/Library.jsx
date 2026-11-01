@@ -106,8 +106,7 @@ export default function Library() {
           .get(`/api/search?q=${encodeURIComponent(query)}`)
           .then((d) => {
             if (!active) return;
-            // The endpoint returns one row per matching block; show each
-            // section once.
+            // One row per section already; kept as a guard.
             const seen = new Set();
             setResults(d.results.filter((r) => !seen.has(r.section_id) && seen.add(r.section_id)));
           })

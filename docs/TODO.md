@@ -256,7 +256,7 @@ need extending.
 
 - [x] **P1** GitHub Actions: parser tests, backend tests (with a Postgres
   service), frontend lint + build on every push and PR.
-- [ ] **P1** Playwright smoke test: open a book, expand a chapter, read a
+- [x] **P1** Playwright smoke test: open a book, expand a chapter, read a
   section, search, sign in.
 - [ ] **P2** Golden-output tests for the parser: the outline of each real
   book layout checked in as a fixture (small excerpts), so parser changes

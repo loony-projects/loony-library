@@ -1,0 +1,15 @@
+{
+  "name": "loony-library-e2e",
+  "private": true,
+  "description": "Browser smoke test: loads a fixture book into a throwaway Postgres schema, serves the built frontend from the backend, and drives the reader with Playwright.",
+  "type": "module",
+  "scripts": {
+    "test": "node prepare.mjs && playwright test",
+    "install-browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0"
+  }
+}

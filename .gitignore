@@ -35,3 +35,7 @@ yarn-error.log*
 # Backups of env files (they hold secrets)
 .env.bak*
 *.env.bak*
+
+# Playwright output
+e2e/test-results/
+e2e/playwright-report/

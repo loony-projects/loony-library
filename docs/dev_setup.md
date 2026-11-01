@@ -61,6 +61,21 @@ it isn't found, the library starts anyway, without sign-in. Plain
 `scripts/stop.sh` stops loony-auth only if `start.sh` started it, since other
 apps may share it.
 
+## Browser smoke test
+
+```sh
+cd e2e
+npm install && npm run install-browser   # once: Playwright and Chromium
+npm test
+```
+
+It creates an `e2e` schema in `DATABASE_URL` (from `backend/.env`), runs the
+migrations there, loads the fixture book (`e2e/fixtures/e2e-book`) with
+book-import, builds the frontend, serves both from the backend on port 4199,
+and drives it in Chromium: library -> book -> chapter -> section (code block
+with copy button) -> search, and library-wide search. The schema is dropped
+afterwards; nothing else in the database is touched. CI runs it too.
+
 ## Public site through a Cloudflare tunnel
 
 The library is published at **https://books.lovegood.in** and loony-auth at
