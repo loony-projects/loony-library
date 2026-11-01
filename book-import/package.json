@@ -14,6 +14,7 @@
     "dry-run": "node packages/markdown-parser/src/cli.js --out book-output.md",
     "load": "node packages/migration/src/migrate.js",
     "reload": "node packages/migration/src/migrate.js --reload",
+    "import": "node packages/migration/src/import.js",
     "test": "npm test --workspaces --if-present"
   }
 }

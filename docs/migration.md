@@ -283,6 +283,17 @@ New books and their sections are drafts unless loaded with `--publish` (or
 `"publish": true` in `book.json`). `load` refuses a slug that's already
 loaded.
 
+`npm run import -- <folder>` does this for every book under a folder (a
+book is a directory with a `book.json` or a `markdown/` folder): it parses
+each and prints a table - chapters, sections, code blocks, warnings, errors,
+missing images, and whether it would be loaded (new), reloaded (already
+loaded) or skipped (parse errors). With `--apply` it loads and reloads them,
+each in its own transaction; a failure doesn't stop the rest.
+
+Images are matched by base name in `markdown/images/`, then anywhere under
+the book's folder; every image that isn't found - and every `![]()` with no
+source - is listed with its page file and line.
+
 `reload` keeps the book row - its id, shelves, ratings, reviews, reading
 history, co-authors and cover - and replaces its chapters, sections,
 glossary and symbols. What pointed at an old section moves to the matching

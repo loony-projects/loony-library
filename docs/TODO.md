@@ -19,7 +19,7 @@ need extending.
 - [x] **P1** `book.json` manifest per book: title, subtitle, author(s), slug,
   category, language, edition, year, ISBN, source folder
   (`markdown-cleaned/`). `npm run load` reads it; no more `--title/--author`.
-- [ ] **P1** `npm run import -- <folder>`: survey every book under a folder,
+- [x] **P1** `npm run import -- <folder>`: survey every book under a folder,
   dry-run each, print a summary table (chapters, sections, code blocks,
   warnings, missing images), load the clean ones, list the rest.
 - [x] **P1** Fix `--reset`: it deletes by **title**, and the two Build-LLM
@@ -56,7 +56,7 @@ need extending.
 ### Content quality
 - [ ] **P1** Run the code unmangler during import for books whose code is in
   plain paragraphs (Build-LLM-1); currently a separate manual step.
-- [ ] **P1** Missing images reported with file and line (about 10 across
+- [x] **P1** Missing images reported with file and line (about 10 across
   current books), and found by name anywhere under the book folder.
 - [ ] **P2** Unmangler for more languages (Rust, TypeScript, Go) using the
   tree-sitter analyzers already in the parser.
