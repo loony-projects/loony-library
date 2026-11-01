@@ -81,7 +81,11 @@ confirmed separately; revision history restores content edits, not deletions.
 
 ## Reading and export
 
-Sections have previous/next links in depth-first reading order. Appearance
+Sections have previous/next links in depth-first reading order. Keyboard
+shortcuts while reading (not while typing in a field): `j`/`k` (or `n`/`p`)
+next/previous section, `/` search this book, `t` show or hide the contents
+(remembered per browser on desktop; the drawer on small screens), `?` lists
+them. Code blocks show their language and have a Copy button. Appearance
 controls offer dark mode, font size and line spacing. The sidebar has keyboard
 resizing, the page has a skip link, and dialogs trap focus, close with Escape,
 and restore focus to their trigger. These are targeted accessibility

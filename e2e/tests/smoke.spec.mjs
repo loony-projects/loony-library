@@ -36,3 +36,34 @@ test("library search finds a passage and opens it", async ({ page }) => {
   await passage.click();
   await expect(page.getByText(/rare word zanzibarquux/)).toBeVisible();
 });
+
+test("keyboard: j/k move between sections, / searches, t hides the contents, ? lists the keys", async ({ page }) => {
+  await page.goto("/e2e-test-book");
+  const toc = page.getByRole("navigation", { name: "Table of contents" });
+  await expect(toc).toBeVisible();
+
+  await page.keyboard.press("j"); // from the book's start: the first section
+  await expect(page).toHaveURL(/\/sections\//);
+  const first = page.url();
+  await page.keyboard.press("j");
+  await expect(page).not.toHaveURL(first);
+  await page.keyboard.press("k");
+  await expect(page).toHaveURL(first);
+
+  await page.keyboard.press("/");
+  await expect(page.locator('aside input[aria-label="Search this book"]')).toBeFocused();
+  await page.keyboard.press("j"); // typed into the search box, not a shortcut
+  await expect(page).toHaveURL(first);
+  await page.locator('aside input[aria-label="Search this book"]').blur();
+
+  await page.keyboard.press("t");
+  await expect(toc).toBeHidden();
+  await page.keyboard.press("t");
+  await expect(toc).toBeVisible();
+
+  await page.keyboard.press("?");
+  const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(help).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(help).toBeHidden();
+});

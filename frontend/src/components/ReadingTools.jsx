@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { sectionsInOrder } from "@/lib/toc";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -212,14 +213,7 @@ function NavCard({ to, label, title, next }) {
 }
 
 export function SectionNavigation({ id, slug, toc }) {
-  const sections = [];
-  function walk(nodes) {
-    for (const n of nodes) {
-      sections.push(n);
-      walk(n.children);
-    }
-  }
-  for (const c of toc?.chapters || []) walk(c.sections);
+  const sections = sectionsInOrder(toc);
   const i = sections.findIndex((s) => s.id === id);
   const prev = i > 0 && sections[i - 1];
   const next = i >= 0 && i < sections.length - 1 && sections[i + 1];

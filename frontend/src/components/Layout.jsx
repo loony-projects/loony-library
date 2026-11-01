@@ -20,6 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { sectionsInOrder } from "@/lib/toc";
+import { SHORTCUTS, useShortcuts } from "./useShortcuts";
 
 // Flattens every section id in the TOC (at any depth) into one set, so a
 // delete handler can tell whether the section currently being viewed still
@@ -41,6 +44,42 @@ const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
 const DEFAULT_SIDEBAR_WIDTH = 300;
 const SIDEBAR_WIDTH_KEY = "loony-library-sidebar-width";
+const SIDEBAR_HIDDEN_KEY = "loony-library-sidebar-hidden";
+
+function readStoredHidden() {
+  try {
+    return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+const isDesktop = () => window.matchMedia("(min-width: 1024px)").matches;
+const SEARCH_INPUT = 'input[aria-label="Search this book"]';
+
+// "Press ? for shortcuts": the list, as keyboard keys.
+function ShortcutsDialog({ open, onOpenChange }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogDescription>While reading - not while typing in a field.</DialogDescription>
+        </DialogHeader>
+        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
+          {SHORTCUTS.map(([key, what]) => (
+            <div key={key} className="contents">
+              <dt>
+                <kbd className="inline-flex min-w-7 justify-center rounded-md border bg-muted px-2 py-0.5 font-mono text-xs shadow-xs">{key}</kbd>
+              </dt>
+              <dd className="text-muted-foreground">{what}</dd>
+            </div>
+          ))}
+        </dl>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function readStoredWidth() {
   try {
@@ -156,6 +195,8 @@ export default function Layout() {
   const [toc, setToc] = useState(null);
   const [error, setError] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(readStoredWidth);
+  const [sidebarHidden, setSidebarHidden] = useState(readStoredHidden);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [creating, setCreating] = useState(null); // null | { type: "chapter" } | { type: "section", chapterId, parentId }
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -287,6 +328,46 @@ export default function Layout() {
     document.body.classList.add("resizing-sidebar");
   }
 
+  // Keyboard: j/k next/previous section, / search, t contents, ? help.
+  const currentSectionId = location.pathname.match(/\/sections\/([^/]+)/)?.[1] ?? null;
+  function goToSection(step) {
+    const sections = sectionsInOrder(toc);
+    if (!sections.length) return;
+    const i = sections.findIndex((s) => s.id === currentSectionId);
+    const target = i === -1 ? (step > 0 ? sections[0] : null) : sections[i + step];
+    if (target) navigate(`/${bookSlug}/sections/${target.id}`);
+  }
+  function toggleSidebar() {
+    if (!isDesktop()) return setDrawerOpen((open) => !open);
+    setSidebarHidden((hidden) => {
+      try {
+        localStorage.setItem(SIDEBAR_HIDDEN_KEY, hidden ? "0" : "1");
+      } catch {
+        // storage unavailable - it just won't be remembered
+      }
+      return !hidden;
+    });
+  }
+  function focusSearch() {
+    if (isDesktop()) {
+      if (sidebarHidden) setSidebarHidden(false);
+      requestAnimationFrame(() => document.querySelector(`aside ${SEARCH_INPUT}`)?.focus());
+    } else {
+      setDrawerOpen(true);
+      // The drawer's search box exists once it has opened.
+      setTimeout(() => document.querySelector(`[role="dialog"] ${SEARCH_INPUT}`)?.focus(), 150);
+    }
+  }
+  useShortcuts({
+    j: () => goToSection(1),
+    n: () => goToSection(1),
+    k: () => goToSection(-1),
+    p: () => goToSection(-1),
+    "/": focusSearch,
+    t: toggleSidebar,
+    "?": () => setShortcutsOpen(true),
+  });
+
   const sidebarProps = {
     book,
     bookSlug,
@@ -313,13 +394,13 @@ export default function Layout() {
         Skip to content
       </a>
       <aside
-        className="no-print sticky top-0 hidden h-dvh shrink-0 border-r bg-muted/50 lg:block"
+        className={`no-print sticky top-0 hidden h-dvh shrink-0 border-r bg-muted/50 ${sidebarHidden ? "" : "lg:block"}`}
         style={{ width: sidebarWidth }}
       >
         <BookSidebar {...sidebarProps} />
       </aside>
       <div
-        className="no-print group relative z-10 -ml-[3px] hidden w-[6px] shrink-0 cursor-col-resize outline-none lg:block"
+        className={`no-print group relative z-10 -ml-[3px] hidden w-[6px] shrink-0 cursor-col-resize outline-none ${sidebarHidden ? "" : "lg:block"}`}
         onMouseDown={startResize}
         role="separator"
         aria-orientation="vertical"
@@ -355,9 +436,10 @@ export default function Layout() {
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className={sidebarHidden ? "" : "lg:hidden"}
               aria-label="Open contents"
-              onClick={() => setDrawerOpen(true)}
+              title="Contents (t) · shortcuts (?)"
+              onClick={() => (isDesktop() ? toggleSidebar() : setDrawerOpen(true))}
             >
               <Menu />
             </Button>
@@ -399,6 +481,7 @@ export default function Layout() {
         </main>
       </div>
 
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent side="left" className="bg-background p-0">
           <SheetTitle className="sr-only">Contents</SheetTitle>

@@ -93,7 +93,7 @@ need extending.
 - [ ] **P3** Download all code of a chapter as files.
 
 ### Navigation
-- [ ] **P1** Keyboard shortcuts: `j/k` next/previous section, `/` search,
+- [x] **P1** Keyboard shortcuts: `j/k` next/previous section, `/` search,
   `t` toggle sidebar, `?` help.
 - [ ] **P2** "On this page" mini-outline of a section's subheadings, with
   scroll spy.
