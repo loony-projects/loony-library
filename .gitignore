@@ -30,3 +30,7 @@ yarn-error.log*
 
 # Logs and pid files from scripts/start.sh
 .run/
+
+# Backups of env files (they hold secrets)
+.env.bak*
+*.env.bak*
