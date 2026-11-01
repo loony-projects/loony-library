@@ -51,25 +51,47 @@ Each file is parsed once; ownership is assigned in one pass; all state (diagnost
 
 ## Chapters and sections from organized folders
 
-**[buildOutlineByFolders.js](../book-import/packages/markdown-parser/src/buildOutlineByFolders.js)** — used when `markdown/` holds numbered folders, as produced with [prompts/organize-book-markdown.md](./prompts/organize-book-markdown.md):
+**[buildOutlineByFolders.js](../book-import/packages/markdown-parser/src/buildOutlineByFolders.js)** — used when `markdown/` holds numbered or named book folders. The folders are the structure: no contents page is needed, and headings never create chapters or sections. Two layouts are read, and can be mixed in one book.
+
+**Folders of pages** (as produced with [prompts/organize-book-markdown.md](./prompts/organize-book-markdown.md) and `npm run organize`):
 
 ```
 markdown/
-  01_FrontPages/                 front matter - one section per file (02_Copyright.md -> "Copyright")
+  01_FrontPages/                 front matter - one section per file (02_Copyright.md -> "Copyright");
+                                   unnumbered page files form one section, a subfolder is a section
+  00_<Title>/                    an unnumbered introduction ("Welcome to Comprehensive Rust")
   02_<Chapter>/                  a chapter: its loose pages are the chapter's opening ("body" section)
-    01_<Section>/                each numbered subfolder is a section
-  03_Part_I_<Title>/             a folder whose first heading is "Part ..." is a part;
-  04_Part_I_<Chapter>/             later chapters carrying the same Part_ label belong to it
-  NN_Appendix_A_<Title>/         an appendix (or a folder whose first heading is "Appendix A ...")
-  NN_BackPages/                  back matter - one section per file (01_Glossary.md is the glossary)
+    01_<Section>/                each numbered subfolder is a section (deeper folders: reported, not read)
+  03_Part_I_<Title>/             a part folder; later chapters carrying the same Part_ label belong to it
+  04_Part_I_<Chapter>/
+  NN_Appendix_A_<Title>/         an appendix (or a folder whose title heading is "Appendix A ...")
+  NN_BackPages/                  back matter - one section per file (01_Glossary.md is the glossary);
+                                   BackPages, End_Matter, LastPages, Back_Matter all count
 ```
 
-- The folders are the structure; no contents page is needed, and headings never create chapters or sections.
-- Titles and numbers come from each folder's own title heading — the first heading of its first page, when it names the folder (`## 1.1 What is an LLM?` for `01_What_is_an_LLM`, `## A.1 What is PyTorch`, `## Appendix A. Introduction to PyTorch`). That heading is consumed; every other heading stays in place as a `subheading`. Without a matching heading the folder name is used (`_` → space).
-- Chapters are numbered 1, 2, 3… in folder order; appendices get their letter.
-- Parts: a `Part_` folder, a folder named like a part the contents page lists, or a part banner at the start of a chapter folder - a first heading "Part 1: …", "Part XV" (titled by the next heading), or a part the contents page lists ("Classification" for "PART 1CLASSIFICATION") - before the chapter's own title. The banner and the text up to the chapter title become the part; the chapters after it belong to it.
-- File names inside front/back pages give those sections their role (`Copyright`, `Glossary`, `About_the_Author`).
-- Reported, not used: `.md` files loose in `markdown/` (`folders.loose_file`) and folders nested deeper than chapter → section (`folders.nested_ignored`).
+**One file per section** (Hands-On LLMs, Machine Learning in Action):
+
+```
+markdown/
+  00_Front_Matter.md or Front_Matter/    front matter
+  01_Preface/                            a numbered folder whose 00_ files open it
+  Chapter_01_<Title>/                    a chapter, numbered from the folder
+    00_Introduction.md                     00_ files open the chapter
+    01_<Section_Title>.md                  every other NN_ file is a section,
+    02_<Section_Title>/                    and every NN_ folder: all its pages,
+      00_Overview.md, 01_<Sub>.md, ...       subsections included, in order
+  End_Matter/                            back matter; an NN_Appendix_X_ folder or file in it is an appendix
+```
+
+**Named front and back matter folders** (Rust books): unnumbered folders named for a part of a book - `Front_Matter/`, `Foreword/`, `Preface/`, `Chapters/` or `Contents/` (the contents page), `Epilogue/`, `Index/`, `Index_Symbols/`, `Back_Matter/` - go into one Front Matter or Back Matter element, in the usual book order. `markdown/` is read whenever it holds such folders, even with a stray page beside it.
+
+Titles, numbers and parts:
+
+- Each folder's own title heading - among the first headings of its first page, when it names the folder (`## 1.1 What is an LLM?` for `01_What_is_an_LLM`, `## A.1 What is PyTorch`, `## Appendix A. Introduction to PyTorch`, `## CHAPTER 1 Hello Transformers`) - gives the printed title and number and is consumed; every other heading stays in place as a `subheading`. Without a matching heading the folder name is used (`_` → space).
+- A "Chapter 4" (or bare "6") heading just before the title gives the chapter's number and is consumed too; otherwise chapters are numbered in order (a `Chapter_NN_` folder gives its own). Appendices get their letter.
+- Parts: a `Part_` folder; a folder without section folders named like a part the book's contents page lists ("Part I. Data Structures"); or a part banner at the start of a chapter folder - a first heading "Part 1: …", "Part XV" (titled by the next heading), or a part the contents page lists ("Classification" for "PART 1CLASSIFICATION") - before the chapter's own title. The banner and the text up to the chapter title become the part; the chapters after it belong to it.
+- File names inside front/back pages give those sections their role (`Copyright`, `Glossary`, `About_the_Author`; CamelCase names become words).
+- Reported, not used: `.md` files loose in `markdown/` other than `README.md` (`folders.loose_file`), and folders nested deeper than chapter → section in the page-folder layout (`folders.nested_ignored`).
 
 ### Splitting chapters into sections: `npm run organize`
 

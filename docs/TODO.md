@@ -71,7 +71,7 @@ need extending.
 - [ ] **P3** Image alt text from figure captions ("Figure 3.2 …").
 
 ### Docs
-- [ ] **P1** Update [migration.md](migration.md) and
+- [x] **P1** Update [migration.md](migration.md) and
   [prompts/organize-book-markdown.md](prompts/organize-book-markdown.md) with
   every supported layout (NN_ page folders, Chapter_NN_ one-file-per-section,
   Front_Matter/End_Matter/LastPages, role folders, parts from the contents

@@ -12,6 +12,15 @@ language, dictionaries and glossaries, and anthologies.
 
 Book folder: `<PATH TO BOOK FOLDER>`
 
+> **Before using this prompt:** if the book's chapters are already folders of
+> pages and only the sections are missing, `npm run organize` in
+> `book-import/` does that part from the book's own contents list, verified
+> byte-for-byte (see [../migration.md](../migration.md#splitting-chapters-into-sections-npm-run-organize)).
+> The importer also reads other organized layouts (one file per section,
+> named Front_Matter/End_Matter folders) - see
+> [../migration.md](../migration.md#chapters-and-sections-from-organized-folders).
+> This prompt produces the canonical layout.
+
 ## Your task
 
 The book folder contains a book that was converted to Markdown **one file
