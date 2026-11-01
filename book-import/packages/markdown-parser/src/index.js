@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { buildOutlineByToc, slugify } from "./buildOutlineByToc.js";
 import { buildOutlineByFolders, hasBookFolders } from "./buildOutlineByFolders.js";
+import { findManifest, ManifestError } from "./manifest.js";
+import { UsageError } from "./errors.js";
 import { parseFile } from "./parseFile.js";
 import { collectTerms } from "./extractTermList.js";
 import { finalizeOutline } from "./finalize.js";
@@ -27,6 +29,7 @@ export { countBlocks, summarize } from "./stats.js";
 export { renderBookMarkdown } from "./bookOutput.js";
 export { ROLES, normalizeRole } from "./roles.js";
 export { parseHeadingText } from "./headings.js";
+export { findManifest, readManifest, ManifestError, MANIFEST_FIELDS } from "./manifest.js";
 
 // A book is a directory of Markdown - typically pdf-to-md output
 // (<name>_page_NNNN.md files, <name>_metadata.json, images/). Everything
@@ -57,15 +60,30 @@ function readMetadataName(sourceDir, files, diagnostics) {
 
 // Title: the PDF name from <name>_metadata.json, else the folder name (its
 // parent's when the folder is just "markdown"), underscores as spaces.
-function bookMetadata(sourceDir, files, overrides, diagnostics) {
-  const folder = path.basename(sourceDir).toLowerCase() === "markdown" ? path.basename(path.dirname(sourceDir)) : path.basename(sourceDir);
-  const title = overrides.title ?? (readMetadataName(sourceDir, files, diagnostics) ?? folder).replace(/_+/g, " ").trim();
-  return { slug: overrides.slug ?? slugify(title), title, author: overrides.author ?? null, sourceDir };
+// Book metadata: overrides (command-line flags) win over book.json, which
+// wins over what the directory says (<name>_metadata.json, folder name).
+function bookMetadata(sourceDir, files, overrides, diagnostics, manifest = {}) {
+  const folder = /^markdown(?:[-_].*)?$/i.test(path.basename(sourceDir)) ? path.basename(path.dirname(sourceDir)) : path.basename(sourceDir);
+  const title = overrides.title ?? manifest.title ?? (readMetadataName(sourceDir, files, diagnostics) ?? folder).replace(/_+/g, " ").trim();
+  const pick = (field, from = field) => overrides[field] ?? manifest[from] ?? null;
+  return {
+    slug: overrides.slug ?? manifest.slug ?? slugify(title),
+    title,
+    author: pick("author"),
+    publisher: pick("publisher"),
+    isbn: pick("isbn"),
+    edition: pick("edition"),
+    published_year: pick("published_year", "year"),
+    language: pick("language"),
+    series: pick("series"),
+    volume: pick("volume"),
+    category: pick("category"),
+    publish: overrides.publish ?? manifest.publish ?? null,
+    sourceDir,
+  };
 }
 
-// An error in how a command was invoked or configured (bad option, missing
-// or wrong UPLOAD_BOOK_PATH) - CLIs print just the message, no stack.
-export class UsageError extends Error {}
+export { UsageError } from "./errors.js";
 
 // The book to parse is always UPLOAD_BOOK_PATH from book-import/.env.
 export function bookDirFromEnv() {
@@ -89,6 +107,14 @@ export function parseBookDirectory(dir, overrides = {}) {
   if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
     throw new Error(`Not a directory: ${sourceDir}`);
   }
+  // book.json, next to markdown/: metadata, and which Markdown folder to read.
+  const manifest = findManifest(sourceDir);
+  if (manifest?.data.source && manifest.bookDir === sourceDir) {
+    sourceDir = path.resolve(manifest.bookDir, manifest.data.source);
+    if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+      throw new ManifestError(`${manifest.file}: "source" is not a directory: ${sourceDir}`);
+    }
+  }
   // pdf-to-md lays a book out as <book>/{<book>.pdf, markdown/, pages/}:
   // given the book folder itself, read its markdown/ subfolder.
   const hasMarkdown = (d) => fs.readdirSync(d).some((f) => f.endsWith(".md"));
@@ -98,8 +124,9 @@ export function parseBookDirectory(dir, overrides = {}) {
     sourceDir = markdownDir;
   }
   const diagnostics = createDiagnostics();
+  if (manifest) diagnostics.info("book.manifest", `Book metadata from ${manifest.file}.`, {});
   const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
-  const book = bookMetadata(sourceDir, entries.map((e) => e.name), overrides, diagnostics);
+  const book = bookMetadata(sourceDir, entries.map((e) => e.name), overrides, diagnostics, manifest?.data);
 
   if (hasBookFolders(sourceDir)) {
     return assemble(book, buildOutlineByFolders(sourceDir, { diagnostics }), diagnostics);

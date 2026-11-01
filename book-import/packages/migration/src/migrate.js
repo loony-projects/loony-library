@@ -101,8 +101,8 @@ async function loadIntoPostgres(data) {
     const {
       rows: [{ id: bookId }],
     } = await client.query(
-      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id, status)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+      `insert into books (slug, title, author, publisher, isbn, edition, price, published_year, category_id, status, language, series, volume)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11,'und'),$12,$13) returning id`,
       [
         data.book.slug,
         data.book.title,
@@ -114,6 +114,9 @@ async function loadIntoPostgres(data) {
         data.book.published_year,
         categoryId,
         data.publish ? "published" : "draft",
+        data.book.language,
+        data.book.series,
+        data.book.volume,
       ]
     );
 
@@ -215,7 +218,9 @@ async function main() {
     throw new UsageError("DATABASE_URL is not set in book-import/.env (see .env.example)");
   }
   const data = parseBookDirectory(bookDirFromEnv(), args.overrides);
-  data.book.category = args.category;
+  // Flags win over the book's book.json.
+  data.book.category = args.category ?? data.book.category;
+  const publish = args.publish || data.book.publish === true;
   console.log(`${data.book.title} (${data.book.slug}) from ${data.book.sourceDir}`);
   console.log(summarize(data));
   printDiagnostics(data.diagnostics);
@@ -232,7 +237,7 @@ async function main() {
   }
 
   resolveAndCopyImages(data.chapters, data.book);
-  await loadIntoPostgres({ ...data, reset: args.reset, publish: args.publish });
+  await loadIntoPostgres({ ...data, reset: args.reset, publish });
 }
 
 main().catch((err) => {

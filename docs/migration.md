@@ -106,6 +106,33 @@ npm run organize -- --pdf-contents 7-12 --apply   # contents list read from thos
 - Only chapter folders with page files and no section folders are touched,
   so running it again does nothing.
 
+## Book metadata: `book.json`
+
+A `book.json` in the book's folder (next to `markdown/`) holds what the
+Markdown doesn't say, so `npm run load` / `npm run reload` need no flags:
+
+```json
+{
+  "title": "Natural Language Processing with Transformers",
+  "slug": "nlp-with-transformer-models",
+  "author": "Lewis Tunstall, Leandro von Werra, Thomas Wolf",
+  "language": "en",
+  "category": "computer-science",
+  "publish": true,
+  "source": "markdown-cleaned"
+}
+```
+
+Fields (all optional): `title`, `slug`, `author`, `publisher`, `isbn`,
+`edition`, `year`, `language`, `series`, `volume`, `category` (a category
+slug), `publish` (load as published, not draft), and `source` - the Markdown
+folder to read, relative to `book.json` (default `markdown/`; e.g. the code
+unmangler's `markdown-cleaned/`). It's found whether `UPLOAD_BOOK_PATH` is
+the book folder or its `markdown/` folder. Flags (`--title`, `--slug`,
+`--author`, `--category`, `--publish`) win over it; without it, title and
+slug come from `<name>_metadata.json` or the folder name. An unknown field or
+a wrong type stops the command with the problem named.
+
 ## Chapters from the book's contents page
 
 Used for flat per-page Markdown (no numbered folders).

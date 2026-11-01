@@ -16,7 +16,7 @@ need extending.
   the book's contents page, plans sections, backs up `markdown/`, splits
   chapter folders into section folders, and verifies every page rejoins
   byte-for-byte. (The scripts were throwaway and were lost once.)
-- [ ] **P1** `book.json` manifest per book: title, subtitle, author(s), slug,
+- [x] **P1** `book.json` manifest per book: title, subtitle, author(s), slug,
   category, language, edition, year, ISBN, source folder
   (`markdown-cleaned/`). `npm run load` reads it; no more `--title/--author`.
 - [ ] **P1** `npm run import -- <folder>`: survey every book under a folder,

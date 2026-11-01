@@ -39,6 +39,11 @@ syntax analysis), `--all-diagnostics` (print info-level diagnostics too).
 `--publish` (make the book and its sections visible to readers right away -
 otherwise they're drafts). The backend picks up a reloaded book right away.
 
+A `book.json` next to the book's `markdown/` folder holds its title, slug,
+author, category, publish state, language and which Markdown folder to read,
+so `load`/`reload` need no flags - see
+[../docs/migration.md](../docs/migration.md#book-metadata-bookjson).
+
 `organize` flags: `--apply` (otherwise only the plan is printed), `--show`,
 `--contents <path>`, `--pdf-contents <first>-<last>` - see
 [../docs/migration.md](../docs/migration.md#splitting-chapters-into-sections-npm-run-organize).

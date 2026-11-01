@@ -32,7 +32,9 @@ test("pdf-to-md directory: pages in numeric order, chapters from the contents pa
     { parent: "Beginning_Nodejs" }
   );
   const result = parseBookDirectory(dir);
-  assert.deepEqual(result.book, { slug: "beginning-nodejs", title: "Beginning Nodejs", author: null, sourceDir: dir });
+  const { slug, title, author, sourceDir, ...rest } = result.book;
+  assert.deepEqual({ slug, title, author, sourceDir }, { slug: "beginning-nodejs", title: "Beginning Nodejs", author: null, sourceDir: dir });
+  assert.ok(Object.values(rest).every((v) => v === null), "no book.json: no other metadata");
   assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
     ["front_matter", null, "Front Matter"],
     ["chapter", "1", "Understanding Node.js"],
