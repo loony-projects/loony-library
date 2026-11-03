@@ -45,8 +45,8 @@ const NUMBERED = /^(\d{2,3})_(.+)$/;
 // at 1); P2-00_<Title> is part 2 itself - its title and opening pages.
 const PART_CHAPTER = /^P(\d+)-(\d{2,3})_(.+)$/i;
 const CHAPTER_DIR = /^Chapter_(\d+)_(.+)$/i;
-const FRONT = /^front_?(?:pages?|matter)$/i;
-const BACK = /^(?:back|end|last)_?(?:pages?|matter)$/i;
+const FRONT = /^front[_ ]?(?:pages?|matter)$/i;
+const BACK = /^(?:back|end|last)[_ ]?(?:pages?|matter)$/i;
 const PART_LABEL = /^Part_([A-Za-z0-9]+)_(.+)$/;
 const APPENDIX = /^Appendix_([A-Za-z0-9]+)(?:_|\.|$)/;
 
@@ -153,8 +153,8 @@ function readPages(root, relDir, files, diagnostics) {
 }
 
 // A heading that is only a chapter's label: "Chapter 4", "CHAPTER 4", "6".
-// "Chapter 4", "CHAPTER 4", "6", and Bodo "फरा - 4".
-const LABEL_PREFIX = "(?:chap(?:ter|\\.)?\\s+|फरा\\s*[-–:]?\\s*)";
+// "Chapter 4", "CHAPTER 4", "6", and Bodo "फरा - 4" / "खोन्दो-4".
+const LABEL_PREFIX = "(?:chap(?:ter|\\.)?\\s+|(?:फरा|खोन्दो)\\s*[-–:]?\\s*)";
 const CHAPTER_LABEL = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\.?$`, "i");
 const PRINTED_NUMBER = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\b`, "i");
 

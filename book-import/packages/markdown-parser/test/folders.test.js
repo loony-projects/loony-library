@@ -318,3 +318,16 @@ test("P<n>-NN_ folders: chapters numbered per part, P<n>-00_ is the part; Bodo �
   assert.equal(geo.partId, part2.id, "a part without a P2-00_ folder still groups its chapters");
   assert.deepEqual(one.sections[0].blocks.map((b) => b.content.text), ["बाथ्रा।"], "the फरा label and title are consumed");
 });
+
+test("Bodo खोन्दो chapter labels; a 00_Front Matter folder (with a space) is front matter", () => {
+  const dir = bookTree({
+    "00_Front Matter/b_page_0001.md": "# बिगियान\n",
+    "01_जिबसाफोर - लोगो आरो सुथुर (MICROORGANISMS)/b_page_0002.md": "# खोन्दो 2 : जिबसाफोरः लोगो आरो सुथुर (MICROORGANISMS)\n\nजिबसा।\n\n## 2.1 जिबसाफोर\n\nसानस्रि।\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["chapter", "2", "जिबसाफोरः लोगो आरो सुथुर (MICROORGANISMS)"],
+  ]);
+  assert.equal(result.chapters[1].sections[0].blocks[0].content.text, "जिबसा।", "the label and title heading are consumed, not the 2.1 section heading");
+});
