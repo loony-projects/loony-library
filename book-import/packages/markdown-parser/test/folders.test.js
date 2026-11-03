@@ -331,3 +331,25 @@ test("Bodo खोन्दो chapter labels; a 00_Front Matter folder (with a s
   ]);
   assert.equal(result.chapters[1].sections[0].blocks[0].content.text, "जिबसा।", "the label and title heading are consumed, not the 2.1 section heading");
 });
+
+test('Bodo ordinal labels ("नैथि खोन्दो" = chapter 2) and part banners ("नैथि फराजथाइ — ...") in folders named for the part', () => {
+  const dir = bookTree({
+    "01_सेथि फराजथाइ - मिथिंगायारि भुमखौरां/b_page_0005.md": "# सेथि फराजथाइ — मिथिंगायारि भुमखौरां\n\n## सेथि खोन्दो\n\n# बोथोर आरो बारहावा\n\nबोथोर।\n",
+    "02_नैथि फराजथाइ - सुबुं भुमखौरां/b_page_0032.md": "# नैथि फराजथाइ — सुबुं भुमखौरां\n\n## नैथि खोन्दो\n\n# बुहुमनि मानसि\n\nमानसि।\n",
+    "03_सुबुं-थाखुलि/b_page_0074.md": "## थामथि खोन्दो\n\n# सुबुं-थाखुलि\n\nथाखुलि।\n",
+    "04_जोंनि गामि/b_page_0090.md": "## फरा नं- 4\n\n# जोंनि गामि\n\nगामि।\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["part", "1", "मिथिंगायारि भुमखौरां"],
+    ["chapter", "1", "बोथोर आरो बारहावा"],
+    ["part", "2", "सुबुं भुमखौरां"],
+    ["chapter", "2", "बुहुमनि मानसि"],
+    ["chapter", "3", "सुबुं-थाखुलि"],
+    ["chapter", "4", "जोंनि गामि"],
+  ]);
+  const [p1, one, p2, two, three] = result.chapters;
+  assert.equal(one.partId, p1.id);
+  assert.equal(three.partId, p2.id);
+  assert.deepEqual(two.sections[0].blocks.map((b) => b.content.text), ["मानसि।"], "label and title consumed");
+});

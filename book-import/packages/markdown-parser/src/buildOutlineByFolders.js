@@ -153,9 +153,31 @@ function readPages(root, relDir, files, diagnostics) {
 }
 
 // A heading that is only a chapter's label: "Chapter 4", "CHAPTER 4", "6".
-// "Chapter 4", "CHAPTER 4", "6", and Bodo "फरा - 4" / "खोन्दो-4".
-const LABEL_PREFIX = "(?:chap(?:ter|\\.)?\\s+|(?:फरा|खोन्दो)\\s*[-–:]?\\s*)";
+// "Chapter 4", "CHAPTER 4", "6", and Bodo "फरा - 4", "फरा नं- 4" (lesson
+// no.), "खोन्दो-4", "आयदा : 4".
+const LABEL_PREFIX = "(?:chap(?:ter|\\.)?\\s+|(?:फरा(?:\\s*नं\\.?)?|खोन्दो|आयदा)\\s*[-–:]?\\s*)";
 const CHAPTER_LABEL = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\.?$`, "i");
+
+// Bodo ordinals: गिबि/सेथि 1st, नैथि 2nd, ... जिथि 10th, जिसेथि 11th, ...
+const BODO_ORDINAL_BASE = { "से": 1, "नै": 2, "थाम": 3, "ब्रै": 4, "बा": 5, "द'": 6, "दो": 6, "स्नि": 7, "दाइन": 8, "गु": 9 };
+function bodoOrdinal(word) {
+  if (word === "गिबि") return 1;
+  if (word === "जिथि") return 10;
+  const m = word.match(/^(जि)?(.+)थि$/);
+  const base = m && BODO_ORDINAL_BASE[m[2]];
+  return base ? base + (m[1] ? 10 : 0) : null;
+}
+// "नैथि खोन्दो" / "थामथि आयदा" (second chapter, third lesson) -> 2 / 3.
+const ORDINAL_LABEL = /^(\S+)\s+(?:खोन्दो|आयदा|फरा)$/;
+// The chapter number a label heading gives ("Chapter 4", "फरा - 4",
+// "नैथि खोन्दो"), or null when the heading isn't a label.
+function labelNumber(text) {
+  const digits = text.match(CHAPTER_LABEL)?.[1];
+  if (digits) return digits;
+  const ordinal = text.match(ORDINAL_LABEL);
+  const n = ordinal && bodoOrdinal(ordinal[1]);
+  return n ? String(n) : null;
+}
 const PRINTED_NUMBER = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\b`, "i");
 
 // The chapter's title heading among the first headings of its opening pages,
@@ -166,9 +188,13 @@ function chapterHeadings(opening, names) {
   for (let i = 0; i < firsts.length; i++) {
     const title = names.map((n) => openingHeading(opening, n, firsts[i])).find(Boolean);
     if (!title) continue;
-    const label = i > 0 && CHAPTER_LABEL.test(headingText(firsts[i - 1])) ? firsts[i - 1] : null;
+    const label = i > 0 && labelNumber(headingText(firsts[i - 1])) ? firsts[i - 1] : null;
     return { title, label };
   }
+  // A folder named for something else (its part): when the chapter opens
+  // with a label heading, it and the heading after it are the chapter's
+  // label and title ("सेथि खोन्दो", "बोथोर आरो बारहावा").
+  if (firsts.length > 1 && labelNumber(headingText(firsts[0]))) return { title: firsts[1], label: firsts[0] };
   return { title: null, label: null };
 }
 
@@ -313,15 +339,24 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const chapterDir = name.match(CHAPTER_DIR);
     if (!content.opening.length || name.match(PART_LABEL) || name.match(APPENDIX)) return null;
     const folderTitle = titleFromName(chapterDir ? chapterDir[2] : name);
-    const { title, label } = chapterHeadings(content.opening, [name.replace(/_+/g, " "), folderTitle]);
-    const stopAt = label ?? title;
+    // A folder that is itself a listed part (its page, no sections) isn't split.
+    if (!content.units.length && listedParts.has(key(folderTitle))) return null;
     const headings = content.opening.flatMap((p) => p.items.filter((item) => item.kind === "heading"));
     const banner = headings[0];
-    if (!stopAt || !banner || banner === stopAt) return null;
+    if (!banner) return null;
     const text = headingText(banner);
-    const said = text.match(/^part\s+([ivxlc]+|\d+)\b[.:]?\s*(.*)$/i);
+    // "Part 1: ...", or Bodo "नैथि फराजथाइ — सुबुं भुमखौरां" (second part).
+    const bodoPart = text.match(/^(\S+)\s+फराजथाइ\s*[—–:-]?\s*(.*)$/);
+    const bodoPartNo = bodoPart && bodoOrdinal(bodoPart[1]);
+    const said = text.match(/^part\s+([ivxlc]+|\d+)\b[.:]?\s*(.*)$/i) ?? (bodoPartNo ? [text, String(bodoPartNo), bodoPart[2]] : null);
     const listed = listedParts.get(key(text));
     if (!said && listed === undefined) return null;
+    // The chapter starts at its label or title heading after the banner (a
+    // folder named for its part matches the banner itself, so skip it).
+    const afterBanner = content.opening.map((p) => ({ ...p, items: p.items.filter((item) => item !== banner) }));
+    const { title, label } = chapterHeadings(afterBanner, [name.replace(/_+/g, " "), folderTitle]);
+    const stopAt = label ?? title;
+    if (!stopAt) return null;
     // "Part XV" alone: the part's title is the heading after it.
     const titleHeading = said && !said[2].trim() && headings[1] && headings[1] !== stopAt ? headings[1] : null;
 
@@ -387,7 +422,7 @@ export function buildOutlineByFolders(root, { diagnostics }) {
       role = chapterDir || label ? "chapter" : introduction ? "introduction" : normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
       // The book's own number - "Chapter 4" label, "CHAPTER 1 ..." or "1 ..." title,
       // Chapter_04_ folder - else the next one.
-      const printed = (label && headingText(label).match(CHAPTER_LABEL)[1]) ?? (heading && headingText(heading).match(PRINTED_NUMBER)?.[1]) ?? chapterDir?.[1];
+      const printed = (label && labelNumber(headingText(label))) ?? (heading && headingText(heading).match(PRINTED_NUMBER)?.[1]) ?? chapterDir?.[1];
       if (role === "chapter") chapterNumber = printed ? Number(printed) : chapterNumber + 1;
       number = role === "chapter" ? String(chapterNumber) : null;
       // "1 Understanding LLMs" -> "Understanding LLMs"; a year stays ("1857 ...").
