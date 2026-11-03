@@ -296,3 +296,25 @@ test("a part the contents page lists can open a chapter folder without saying \"
   ]);
   assert.deepEqual(result.chapters[2].sections[0].blocks.map((b) => b.content.text), ["What it is."]);
 });
+
+test("P<n>-NN_ folders: chapters numbered per part, P<n>-00_ is the part; Bodo फरा labels; a year stays in a title", () => {
+  const dir = bookTree({
+    "P1-00_जारिमिन/b_page_0001.md": "# जारिमिन\n\nइतिहास।\n",
+    "P1-01_गोजाम कामरुप राज्यो/b_page_0002.md": "# फरा-1 : गोजाम कामरुप राज्यो\n\nबाथ्रा।\n",
+    "P1-02_1857 मायथाइनि बिग्रायनाय/b_page_0003.md": "# फरा - 2 : 1857 मायथाइनि बिग्रायनाय\n\nबिग्रायनाय।\n",
+    "P2-02_थाथिलि/b_page_0004.md": "# फरा- 2 : थाथिलि\n\nथाथिलि।\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["part", "1", "जारिमिन"],
+    ["chapter", "1", "गोजाम कामरुप राज्यो"],
+    ["chapter", "2", "1857 मायथाइनि बिग्रायनाय"],
+    ["part", "2", "Part 2"],
+    ["chapter", "2", "थाथिलि"],
+  ]);
+  const [part1, one, two, part2, geo] = result.chapters;
+  assert.equal(one.partId, part1.id);
+  assert.equal(two.partId, part1.id);
+  assert.equal(geo.partId, part2.id, "a part without a P2-00_ folder still groups its chapters");
+  assert.deepEqual(one.sections[0].blocks.map((b) => b.content.text), ["बाथ्रा।"], "the फरा label and title are consumed");
+});

@@ -11,7 +11,8 @@ import { execFileSync } from "node:child_process";
 const byName = (a, b) => a.localeCompare(b, "en", { numeric: true });
 
 export function folderName(index, count, title) {
-  let t = title.normalize("NFC").replace(/\s+/g, "_").replace(/[^\p{L}\p{N}_.-]+/gu, "").replace(/_+/g, "_").replace(/^_|_$/g, "");
+  // \p{M}: vowel signs and other combining marks (Devanagari "सम्पद", not "समपद").
+  let t = title.normalize("NFC").replace(/\s+/g, "_").replace(/[^\p{L}\p{M}\p{N}_.-]+/gu, "").replace(/_+/g, "_").replace(/^_|_$/g, "");
   if (t.length > 80) t = t.slice(0, 80).replace(/_[^_]*$/, "");
   return `${String(index + 1).padStart(count > 99 ? 3 : 2, "0")}_${t || "Untitled"}`;
 }

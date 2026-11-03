@@ -12,7 +12,9 @@ import { readPdfContents } from "./contents-pdf.js";
 // chapter the contents list doesn't cover (or a book without one) uses its
 // numbered N.1, N.2 ... headings instead.
 
-const NUMBERED_DIR = /^(\d{2,3})_(.+)$/;
+// NN_<Title>, or P2-NN_<Title> (chapter NN of part 2; P2-00_ is the part itself).
+const NUMBERED_DIR = /^(?:P\d+-)?(\d{2,3})_(.+)$/i;
+const PART_FOLDER = /^P\d+-0+_/i;
 const MATTER = /^(?:front|back|end|last)_?(?:pages?|matter)$/i;
 
 const byName = (a, b) => a.localeCompare(b, "en", { numeric: true });
@@ -32,7 +34,7 @@ function entries(dir) {
 // pages and no section folders.
 export function chapterFolders(root) {
   return entries(root).dirs.filter((d) => {
-    if (MATTER.test(d.replace(NUMBERED_DIR, "$2"))) return false;
+    if (MATTER.test(d.replace(NUMBERED_DIR, "$2")) || PART_FOLDER.test(d)) return false;
     const inner = entries(path.join(root, d));
     return inner.files.length > 0 && inner.dirs.length === 0;
   });

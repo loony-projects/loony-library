@@ -41,6 +41,9 @@ import { slugify } from "./buildOutlineByToc.js";
 // subheading block.
 
 const NUMBERED = /^(\d{2,3})_(.+)$/;
+// P2-03_<Title>: chapter 3 of part 2, numbered as printed (each part starts
+// at 1); P2-00_<Title> is part 2 itself - its title and opening pages.
+const PART_CHAPTER = /^P(\d+)-(\d{2,3})_(.+)$/i;
 const CHAPTER_DIR = /^Chapter_(\d+)_(.+)$/i;
 const FRONT = /^front_?(?:pages?|matter)$/i;
 const BACK = /^(?:back|end|last)_?(?:pages?|matter)$/i;
@@ -54,7 +57,7 @@ const ROLE_ORDER = Object.keys(ROLES);
 // The front/back matter role an unnumbered folder's name gives:
 // Preface -> preface, Chapters -> toc, Index_Symbols -> index.
 function folderRole(name) {
-  if (NUMBERED.test(name) || CHAPTER_DIR.test(name)) return null;
+  if (NUMBERED.test(name) || CHAPTER_DIR.test(name) || PART_CHAPTER.test(name)) return null;
   if (FRONT.test(name)) return "front_matter";
   if (BACK.test(name)) return "back_matter";
   const words = name.toLowerCase().split(/[_\s-]+/).filter(Boolean);
@@ -87,7 +90,7 @@ function topEntries(root) {
   const listed = [];
   const loose = [];
   for (const e of entries) {
-    if (e.isDirectory() && (NUMBERED.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name) || folderRole(e.name))) listed.push({ name: e.name, dir: true });
+    if (e.isDirectory() && (NUMBERED.test(e.name) || PART_CHAPTER.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name) || folderRole(e.name))) listed.push({ name: e.name, dir: true });
     else if (e.isFile() && e.name.endsWith(".md")) {
       if (NUMBERED.test(e.name) && isMatter(e.name)) listed.push({ name: e.name, dir: false });
       else if (!/^readme\.md$/i.test(e.name)) loose.push(e.name);
@@ -150,7 +153,10 @@ function readPages(root, relDir, files, diagnostics) {
 }
 
 // A heading that is only a chapter's label: "Chapter 4", "CHAPTER 4", "6".
-const CHAPTER_LABEL = /^(?:chap(?:ter|\.)?\s+)?(\d+)\.?$/i;
+// "Chapter 4", "CHAPTER 4", "6", and Bodo "फरा - 4".
+const LABEL_PREFIX = "(?:chap(?:ter|\\.)?\\s+|फरा\\s*[-–:]?\\s*)";
+const CHAPTER_LABEL = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\.?$`, "i");
+const PRINTED_NUMBER = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\b`, "i");
 
 // The chapter's title heading among the first headings of its opening pages,
 // with the "Chapter 4" label heading just before it, if any. A part banner
@@ -167,7 +173,8 @@ function chapterHeadings(opening, names) {
 }
 
 // "CHAPTER 1 Hello Transformers" -> "Hello Transformers" (the number is kept separately).
-const stripChapterLabel = (text) => text.replace(/^chap(?:ter|\.)?\s+[0-9ivxlc]+\b[.:]?\s*/i, "");
+// "फरा - 1 : बुहुम बिखुंआव सम साननाय" -> "बुहुम बिखुंआव सम साननाय" too.
+const stripChapterLabel = (text) => text.replace(new RegExp(`^${LABEL_PREFIX}[0-9ivxlc]+\\b\\s*[.:]?\\s*`, "i"), "");
 
 // The title heading a folder opens with, if it names the folder: "1 Understanding
 // Large Language Models" for 02_Understanding_Large_Language_Models,
@@ -380,10 +387,11 @@ export function buildOutlineByFolders(root, { diagnostics }) {
       role = chapterDir || label ? "chapter" : introduction ? "introduction" : normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
       // The book's own number - "Chapter 4" label, "CHAPTER 1 ..." or "1 ..." title,
       // Chapter_04_ folder - else the next one.
-      const printed = (label && headingText(label).match(CHAPTER_LABEL)[1]) ?? (heading && headingText(heading).match(/^(?:chap(?:ter|\.)?\s+)?(\d+)\b/i)?.[1]) ?? chapterDir?.[1];
+      const printed = (label && headingText(label).match(CHAPTER_LABEL)[1]) ?? (heading && headingText(heading).match(PRINTED_NUMBER)?.[1]) ?? chapterDir?.[1];
       if (role === "chapter") chapterNumber = printed ? Number(printed) : chapterNumber + 1;
       number = role === "chapter" ? String(chapterNumber) : null;
-      title = (heading && stripChapterLabel(headingText(heading)).replace(/^\d+\.?\s+/, "")) || folderTitle;
+      // "1 Understanding LLMs" -> "Understanding LLMs"; a year stays ("1857 ...").
+      title = (heading && stripChapterLabel(headingText(heading)).replace(/^\d{1,3}\.?\s+/, "")) || folderTitle;
     }
 
     const sections = [];
@@ -432,6 +440,29 @@ export function buildOutlineByFolders(root, { diagnostics }) {
   for (const { name: entry, dir: isDir } of top.listed) {
     const division = matterOf(entry);
     if (!division) {
+      const partChapter = entry.match(PART_CHAPTER);
+      if (partChapter) {
+        const [, partNo, nn, folderName] = partChapter;
+        const content = chapterContent(root, entry, diagnostics);
+        const element = chapterElement(entry, folderName, content);
+        if (Number(nn) === 0) {
+          element.role = "part";
+          element.number = partNo;
+          parts.set(`P${partNo}`, element);
+        } else {
+          let part = parts.get(`P${partNo}`);
+          if (!part) {
+            part = { role: "part", number: partNo, slug: uniqueSlug(`Part ${partNo}`), title: `Part ${partNo}`, level: null, sort_order: 0, position: { file: entry }, partId: null, sections: [] };
+            parts.set(`P${partNo}`, part);
+            elements.push(part);
+          }
+          if (element.role === "chapter") element.number = String(Number(nn));
+          element.partRef = part;
+        }
+        currentPart = null; // P-folders say their part themselves
+        elements.push(element);
+        continue;
+      }
       const name = CHAPTER_DIR.test(entry) ? entry : entry.replace(NUMBERED, "$2");
       let content = chapterContent(root, entry, diagnostics);
       const split = splitPartBanner(entry, name, content);

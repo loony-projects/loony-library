@@ -92,3 +92,8 @@ test("a chapter that fails verification is restored exactly; the others are kept
   assert.deepEqual(snapshot(path.join(root, "02_Atomics")), before);
   assert.ok(results.filter((r) => r.dir !== "02_Atomics").every((r) => r.ok));
 });
+
+test("section folder names keep combining marks (Devanagari vowel signs)", async () => {
+  const { folderName } = await import("../src/index.js");
+  assert.equal(folderName(2, 5, "सम्पदनि ओंथि आरो गुणथि"), "03_सम्पदनि_ओंथि_आरो_गुणथि");
+});
