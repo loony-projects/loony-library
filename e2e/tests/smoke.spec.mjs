@@ -19,6 +19,16 @@ test("read a book: library, book, chapter, section, code block, search", async (
   await expect(page.locator(".block-code-lang")).toHaveText(/python/i);
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
 
+  // Math renders with KaTeX - inline and display - and prices stay text.
+  const math = page.locator(".reading .katex");
+  await expect(math.first()).toBeVisible();
+  expect(await math.count()).toBeGreaterThanOrEqual(3);
+  await expect(page.locator(".reading .katex-display")).toHaveCount(1);
+  await expect(page.locator(".reading .katex-error")).toHaveCount(0);
+  await expect(page.getByText(/costs \$5 or \$10/)).toBeVisible();
+  // The LaTeX source stays only in KaTeX's hidden MathML annotation, without its $ signs.
+  expect(await page.locator(".reading").innerText()).not.toContain("$\\frac");
+
   // Search this book, open the result.
   await page.getByLabel("Search this book").fill("zanzibarquux");
   const result = page.getByRole("button", { name: /zanzibarquux/ });

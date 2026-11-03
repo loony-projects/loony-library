@@ -67,7 +67,7 @@ need extending.
 - [ ] **P2** Callouts: turn "Note", "Tip", "Warning" sidebars into styled
   admonition blocks.
 - [ ] **P3** Tables broken across pages joined back together.
-- [ ] **P3** Math (`$…$`) rendered with KaTeX.
+- [x] **P3** Math (`$…$`) rendered with KaTeX.
 - [ ] **P3** Image alt text from figure captions ("Figure 3.2 …").
 
 ### Docs
