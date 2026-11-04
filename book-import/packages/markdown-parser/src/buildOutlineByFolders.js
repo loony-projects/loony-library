@@ -59,7 +59,7 @@ const LETTER_DIR = /^[a-z]$/i;
 const IMAGES_DIR = /^\d*_?images$/i;
 const CHAPTER_DIR = /^Chapter_(\d+)_(.+)$/i;
 const FRONT = /^front[-_ ]?(?:pages?|matter)$/i;
-const BACK = /^(?:back|end|last)[-_ ]?(?:pages?|matter)$/i;
+const BACK = /^(?:back|end|last)[-_ ]?(?:pages?|matter|cover)$/i;
 const PART_LABEL = /^Part_([A-Za-z0-9]+)_(.+)$/;
 const APPENDIX = /^Appendix_([A-Za-z0-9]+)(?:_|\.|$)/;
 
@@ -439,8 +439,9 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     } else if (appendixLabel) {
       role = "appendix";
       number = appendixLabel;
-      const m = heading && headingText(heading).match(/^appendix\s+[a-z0-9]+\b[.:]?\s*(.+)$/i);
-      title = m ? m[1].trim() : heading ? headingText(heading) : folderTitle.replace(/^Appendix\s+[A-Za-z0-9]+\.?\s*/i, "");
+      // A heading that's only the label ("Appendix 2:") leaves the title to the folder.
+      const printedTitle = heading && headingText(heading).replace(/^appendix\s+[a-z0-9]+\b[.:]?\s*/i, "").trim();
+      title = printedTitle || folderTitle.replace(/^Appendix\s+[A-Za-z0-9]+\.?\s*/i, "");
     } else {
       role = chapterDir || label ? "chapter" : introduction ? "introduction" : normalizeRole(folderTitle.replace(/\s+/g, "-")) ?? "chapter";
       // The book's own number - "Chapter 4" label, "CHAPTER 1 ..." or "1 ..." title,
@@ -560,7 +561,8 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const front = division === "front";
     const { sections } = matterElement(division, entry);
     let pendingBlank = [];
-    const folderTitle = titleFromName(bare(entry)).replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2");
+    // FrontPages -> "Front Pages", 00_front_matter -> "Front Matter".
+    const folderTitle = titleFromName(bare(entry)).replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(^|\s)(\p{Ll})/gu, (_, gap, letter) => gap + letter.toUpperCase());
     let items;
     if (!isDir) items = [{ name: entry, dir: false, top: true, ...(FILE_CHAPTER.test(entry) ? { title: front ? "Front Matter" : "Back Matter" } : {}) }];
     else if (!isMatter(entry)) items = [{ name: entry, dir: true, top: true, title: folderTitle, role: folderRole(entry) }];

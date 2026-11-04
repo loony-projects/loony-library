@@ -15,7 +15,7 @@ import { readPdfContents } from "./contents-pdf.js";
 // NN_<Title>, or P2-NN_<Title> (chapter NN of part 2; P2-00_ is the part itself).
 const NUMBERED_DIR = /^(?:P\d+-)?(\d{2,3})_(.+)$/i;
 const PART_FOLDER = /^P\d+-0+_/i;
-const MATTER = /^(?:front|back|end|last)_?(?:pages?|matter)$/i;
+const MATTER = /^(?:front|back|end|last)_?(?:pages?|matter|cover)$/i;
 
 const byName = (a, b) => a.localeCompare(b, "en", { numeric: true });
 export const key = (text) => text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");

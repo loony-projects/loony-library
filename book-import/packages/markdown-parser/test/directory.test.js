@@ -152,3 +152,23 @@ test("given a pdf-to-md book folder, its markdown/ subfolder is read", () => {
   assert.equal(result.book.title, "Build-LLM-1");
   assert.equal(result.chapters.filter((c) => c.role === "chapter").length, 1);
 });
+
+test("matter folders are title-cased, a back_cover folder is back matter, and a label-only appendix heading takes its title from the folder", () => {
+  const dir = tempTree({
+    "00_front_matter/p0.md": "Title page.\n",
+    "01_Basics/p1.md": "# Basics\n\nText.\n",
+    "02_Appendix_1_The_Affixes/p2.md": "## Appendix 1: The Affixes\n\nText.\n",
+    "03_Appendix_2_The_Word_Classes/p3.md": "## Appendix 2:\n\n### The Word Classes\n\nText.\n",
+    "04_back_cover/p4.md": "ISBN 978\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["chapter", "1", "Basics"],
+    ["appendix", "1", "The Affixes"],
+    ["appendix", "2", "The Word Classes"],
+    ["back_matter", null, "Back Matter"],
+  ]);
+  assert.deepEqual(result.chapters.at(0).sections.map((s) => s.title), ["Front Matter"]);
+  assert.deepEqual(result.chapters.at(-1).sections.map((s) => s.title), ["Back Cover"]);
+});
