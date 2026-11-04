@@ -353,3 +353,13 @@ test('Bodo ordinal labels ("नैथि खोन्दो" = chapter 2) and pa
   assert.equal(three.partId, p2.id);
   assert.deepEqual(two.sections[0].blocks.map((b) => b.content.text), ["मानसि।"], "label and title consumed");
 });
+
+test('"Chapter-I" (hyphen, Roman numeral) is a chapter label; the chapter title after it is consumed', () => {
+  const dir = bookTree({
+    "01_Bodo_Community/p_page_0012.md": "# Chapter-I\n\n# Bodo Community\n\nIntro.\n",
+    "02_Bodo_Phonology/p_page_0048.md": "## Chapter-IV\n\n# Bodo Phonology\n\nSounds.\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [["chapter", "1", "Bodo Community"], ["chapter", "4", "Bodo Phonology"]]);
+  assert.deepEqual(result.chapters[1].sections[0].blocks.map((b) => b.content.text), ["Sounds."]);
+});

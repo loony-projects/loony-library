@@ -163,6 +163,12 @@ function readPages(root, relDir, files, diagnostics) {
 const LABEL_PREFIX = "(?:chap(?:ter|\\.)?\\s+|(?:फरा(?:\\s*नं\\.?)?|खोन्दो|आयदा)\\s*[-–:]?\\s*)";
 const CHAPTER_LABEL = new RegExp(`^(?:${LABEL_PREFIX})?(\\d+)\\.?$`, "i");
 
+function romanValue(roman) {
+  const value = { i: 1, v: 5, x: 10, l: 50, c: 100 };
+  const digits = [...roman.toLowerCase()].map((c) => value[c]);
+  return digits.reduce((sum, d, i) => sum + (d < (digits[i + 1] ?? 0) ? -d : d), 0);
+}
+
 // Bodo ordinals: गिबि/सेथि 1st, नैथि 2nd, ... जिथि 10th, जिसेथि 11th, ...
 const BODO_ORDINAL_BASE = { "से": 1, "नै": 2, "थाम": 3, "ब्रै": 4, "बा": 5, "द'": 6, "दो": 6, "स्नि": 7, "दाइन": 8, "गु": 9 };
 function bodoOrdinal(word) {
@@ -179,6 +185,9 @@ const ORDINAL_LABEL = /^(\S+)\s+(?:खोन्दो|आयदा|फरा)$/;
 function labelNumber(text) {
   const digits = text.match(CHAPTER_LABEL)?.[1];
   if (digits) return digits;
+  // "Chapter-I", "Chapter IV".
+  const roman = text.match(/^chap(?:ter|\.)?[\s-]*([ivxlc]+)\.?$/i)?.[1];
+  if (roman) return String(romanValue(roman));
   const ordinal = text.match(ORDINAL_LABEL);
   const n = ordinal && bodoOrdinal(ordinal[1]);
   return n ? String(n) : null;
