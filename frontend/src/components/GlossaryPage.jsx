@@ -13,7 +13,7 @@ const MAX_LISTED = 300;
 export default function GlossaryPage() {
   const { bookSlug } = useParams();
   const { book } = useOutletContext() ?? {};
-  const label = book?.category_slug?.includes("glossary") ? "All terms" : "Abbreviations";
+  const label = /glossary|dictionar/.test(book?.category_slug ?? "") ? "All terms" : "Abbreviations";
   const [terms, setTerms] = useState(null);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("");

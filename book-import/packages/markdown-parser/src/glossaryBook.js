@@ -125,10 +125,44 @@ function normalizeSection(section, diagnostics) {
   section.blocks = out;
 }
 
-// Normalizes the letter chapters in place; returns their term entries.
+// A dictionary's entry lines: "- **अंकुर** (सं. पु.) गाजा ।", "- **अ₁** *Noun.* Ok."
+const ENTRY_LINE = /^\s*[-*+]\s+\*\*([^*]+)\*\*\s*(.*)$/;
+const plainMeaning = (text) => text.replace(/\*+/g, "").replace(/^[\s–—:-]+/, "").trim();
+
+// Entries of NN-Title.md chapters. A headword printed more than once
+// (homographs) keeps all its meanings: the first alone would lose the rest.
+function dictionaryEntries(chapter) {
+  const entries = new Map();
+  for (const section of chapter.sections) {
+    for (const block of section.blocks) {
+      if (block.block_type !== "list") continue;
+      for (const line of (block.content.markdown ?? "").split("\n")) {
+        const m = line.match(ENTRY_LINE);
+        const meaning = m && plainMeaning(m[2]);
+        if (!meaning) continue;
+        const term = m[1].trim();
+        const entry = entries.get(term);
+        if (!entry) entries.set(term, { term, expansion: meaning, position: block.position });
+        else if (!entry.expansion.includes(meaning)) entry.expansion += `; ${meaning}`;
+      }
+    }
+  }
+  return [...entries.values()];
+}
+
+// Normalizes the letter chapters in place; returns the book's term entries.
 export function normalizeGlossary(chapters, diagnostics) {
   const entries = [];
+  const dictionary = new Map();
   for (const chapter of chapters) {
+    if (chapter.fromFile) {
+      for (const entry of dictionaryEntries(chapter)) {
+        const seen = dictionary.get(entry.term);
+        if (!seen) dictionary.set(entry.term, entry);
+        else if (!seen.expansion.includes(entry.expansion)) seen.expansion += `; ${entry.expansion}`;
+      }
+      continue;
+    }
     if (!chapter.isLetter) continue;
     for (const section of chapter.sections) {
       normalizeSection(section, diagnostics);
@@ -141,5 +175,6 @@ export function normalizeGlossary(chapters, diagnostics) {
       }
     }
   }
+  entries.push(...dictionary.values());
   return entries;
 }

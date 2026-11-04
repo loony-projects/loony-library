@@ -44,24 +44,33 @@ const NUMBERED = /^(\d{2,3})_(.+)$/;
 // P2-03_<Title>: chapter 3 of part 2, numbered as printed (each part starts
 // at 1); P2-00_<Title> is part 2 itself - its title and opening pages.
 const PART_CHAPTER = /^P(\d+)-(\d{2,3})_(.+)$/i;
+// 03-पाठ-02.md: one file is one unnumbered chapter (a dictionary's letter, a
+// lesson); 00-front-matter.md is front matter.
+const FILE_CHAPTER = /^(\d{2,3})-(.+)\.md$/;
+const DEVANAGARI_DIGITS = "०१२३४५६७८९";
+// "पाठ-02" -> "पाठ_२", as its heading prints it; other names keep their digits.
+const fileChapterName = (title) => {
+  const words = title.replace(/-/g, "_");
+  return /\p{Script=Devanagari}/u.test(words) ? words.replace(/\d+/g, (n) => String(Number(n)).replace(/\d/g, (d) => DEVANAGARI_DIGITS[d])) : words;
+};
 // a/, b/ ...: a dictionary's letters; each is an unnumbered chapter ("A").
 const LETTER_DIR = /^[a-z]$/i;
 // Converter output parked beside the book's folders, not a chapter.
 const IMAGES_DIR = /^\d*_?images$/i;
 const CHAPTER_DIR = /^Chapter_(\d+)_(.+)$/i;
-const FRONT = /^front[_ ]?(?:pages?|matter)$/i;
-const BACK = /^(?:back|end|last)[_ ]?(?:pages?|matter)$/i;
+const FRONT = /^front[-_ ]?(?:pages?|matter)$/i;
+const BACK = /^(?:back|end|last)[-_ ]?(?:pages?|matter)$/i;
 const PART_LABEL = /^Part_([A-Za-z0-9]+)_(.+)$/;
 const APPENDIX = /^Appendix_([A-Za-z0-9]+)(?:_|\.|$)/;
 
-const bare = (name) => name.replace(/\.md$/, "").replace(NUMBERED, "$2");
+const bare = (name) => name.replace(/\.md$/, "").replace(NUMBERED, "$2").replace(/^\d{2,3}-(.+)$/, "$1");
 const isMatter = (name) => FRONT.test(bare(name)) || BACK.test(bare(name));
 const ROLE_ORDER = Object.keys(ROLES);
 
 // The front/back matter role an unnumbered folder's name gives:
 // Preface -> preface, Chapters -> toc, Index_Symbols -> index.
 function folderRole(name) {
-  if (NUMBERED.test(name) || CHAPTER_DIR.test(name) || PART_CHAPTER.test(name) || LETTER_DIR.test(name)) return null;
+  if (NUMBERED.test(name) || CHAPTER_DIR.test(name) || PART_CHAPTER.test(name) || LETTER_DIR.test(name) || FILE_CHAPTER.test(name)) return null;
   if (FRONT.test(name)) return "front_matter";
   if (BACK.test(name)) return "back_matter";
   const words = name.toLowerCase().split(/[_\s-]+/).filter(Boolean);
@@ -97,7 +106,7 @@ function topEntries(root) {
     if (e.isDirectory() && IMAGES_DIR.test(e.name)) continue;
     if (e.isDirectory() && (NUMBERED.test(e.name) || PART_CHAPTER.test(e.name) || LETTER_DIR.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name) || folderRole(e.name))) listed.push({ name: e.name, dir: true });
     else if (e.isFile() && e.name.endsWith(".md")) {
-      if (NUMBERED.test(e.name) && isMatter(e.name)) listed.push({ name: e.name, dir: false });
+      if ((NUMBERED.test(e.name) && isMatter(e.name)) || FILE_CHAPTER.test(e.name)) listed.push({ name: e.name, dir: false });
       else if (!/^readme\.md$/i.test(e.name)) loose.push(e.name);
     }
   }
@@ -116,7 +125,7 @@ function topEntries(root) {
 // Whether a markdown directory is organized into numbered folders holding pages.
 export function hasBookFolders(dir) {
   return topEntries(dir).listed.some((e) => {
-    if (!e.dir) return false;
+    if (!e.dir) return FILE_CHAPTER.test(e.name);
     const inner = entriesOf(path.join(dir, e.name));
     return inner.files.length > 0 || inner.dirs.length > 0;
   });
@@ -480,7 +489,7 @@ export function buildOutlineByFolders(root, { diagnostics }) {
   const matterElement = (division, entry) => {
     if (!matter[division]) {
       const title = division === "front" ? "Front Matter" : "Back Matter";
-      matter[division] = { role: `${division}_matter`, number: null, slug: uniqueSlug(title), title, level: null, sort_order: 0, position: { file: entry }, partId: null, sections: [] };
+      matter[division] = { role: `${division}_matter`, number: null, slug: uniqueSlug(title), title, level: null, sort_order: 0, position: { file: entry }, partId: null, sections: [], fromFile: FILE_CHAPTER.test(entry) };
       if (division === "front") elements.push(matter.front);
     }
     return matter[division];
@@ -489,6 +498,16 @@ export function buildOutlineByFolders(root, { diagnostics }) {
   for (const { name: entry, dir: isDir } of top.listed) {
     const division = matterOf(entry);
     if (!division) {
+      if (!isDir) {
+        const [, , title] = entry.match(FILE_CHAPTER);
+        const element = chapterElement(entry, fileChapterName(title), { opening: readFiles(root, [entry], diagnostics), units: [] });
+        if (element.role !== "appendix" && /^परिशिष्ट/.test(title)) element.role = "appendix";
+        element.role = element.role === "appendix" ? "appendix" : "chapter";
+        element.number = null;
+        element.fromFile = true;
+        elements.push(element);
+        continue;
+      }
       if (LETTER_DIR.test(entry)) {
         const element = chapterElement(entry, entry.toUpperCase(), chapterContent(root, entry, diagnostics));
         element.role = "chapter";
@@ -543,7 +562,7 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     let pendingBlank = [];
     const folderTitle = titleFromName(bare(entry)).replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2");
     let items;
-    if (!isDir) items = [{ name: entry, dir: false, top: true }];
+    if (!isDir) items = [{ name: entry, dir: false, top: true, ...(FILE_CHAPTER.test(entry) ? { title: front ? "Front Matter" : "Back Matter" } : {}) }];
     else if (!isMatter(entry)) items = [{ name: entry, dir: true, top: true, title: folderTitle, role: folderRole(entry) }];
     else {
       // Every subfolder counts here, numbered or not (00_FrontPages/Chapters/).

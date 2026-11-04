@@ -68,3 +68,23 @@ test("a column dump is never paired by position: it stays as printed and is repo
   assert.match(d.file, /g_page_0083/);
   assert.deepEqual(r.chapters[0].sections[0].blocks.map((b) => b.content.text)[0], "social system");
 });
+
+test("NN-Title.md files are unnumbered chapters; dictionary entries become terms; a repeated headword keeps all its meanings", () => {
+  const r = glossary({
+    "00-front-matter.md": "<!-- page-001 -->\n# कोश\n\nप्रकाश्य\n",
+    "01-अ.md": "<!-- page-005 -->\n## अ\n\n- **अंकुर** (सं. पु.) गाजा, बिदमाइ ।\n- **अ₁** *Variant:* **अ'**. *Noun.* Ok.\n- **अंकुर** (क्रि.) रदम ।\n",
+    "02-पाठ-02.md": "## पाठ २\n\nपाठ।\n",
+    "03-परिशिष्ट.md": "# परिशिष्ट\n\n- **अज्नाइ**–एक फूल ।\n",
+  });
+  assert.deepEqual(r.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["front_matter", null, "Front Matter"],
+    ["chapter", null, "अ"],
+    ["chapter", null, "पाठ २"],
+    ["appendix", null, "परिशिष्ट"],
+  ]);
+  assert.deepEqual(r.chapters[2].sections[0].blocks.filter((b) => b.block_type === "paragraph").map((b) => b.content.text), ["पाठ।"], "the heading is the chapter's title");
+  const t = terms(r);
+  assert.equal(t["अंकुर"], "(सं. पु.) गाजा, बिदमाइ ।; (क्रि.) रदम ।");
+  assert.equal(t["अ₁"], "Variant: अ'. Noun. Ok.");
+  assert.equal(t["अज्नाइ"], "एक फूल ।");
+});
