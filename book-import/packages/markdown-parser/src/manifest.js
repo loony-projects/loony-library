@@ -17,6 +17,7 @@ import { UsageError } from "./errors.js";
 // "source" is the Markdown folder to read, relative to book.json (default:
 // markdown/). "unmangle": "py" has the import commands regenerate
 // markdown-cleaned/ with md-code-unmangler and read that (see unmangle.js).
+// "glossary": true is a dictionary in letter folders (see glossaryBook.js).
 // Command-line flags win over the file.
 
 export const MANIFEST_FIELDS = {
@@ -34,6 +35,7 @@ export const MANIFEST_FIELDS = {
   publish: "boolean",
   source: "string",
   unmangle: "string",
+  glossary: "boolean",
 };
 
 const MARKDOWN_DIR = /^markdown(?:[-_].*)?$/i;

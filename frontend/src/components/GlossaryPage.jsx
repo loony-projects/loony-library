@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
+import DOMPurify from "dompurify";
 import { Search } from "lucide-react";
 import { api } from "../api";
 import ReadingSkeleton from "./common/ReadingSkeleton";
 import { EmptyState, ErrorState } from "./common/States";
 
+// A dictionary can have 10,000 terms: only this many are listed until a
+// filter narrows them.
+const MAX_LISTED = 300;
+
 export default function GlossaryPage() {
   const { bookSlug } = useParams();
+  const { book } = useOutletContext() ?? {};
+  const label = book?.category_slug?.includes("glossary") ? "All terms" : "Abbreviations";
   const [terms, setTerms] = useState(null);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("");
@@ -28,7 +35,7 @@ export default function GlossaryPage() {
     );
   }, [terms, filter]);
 
-  if (error) return <ErrorState title="Couldn’t load abbreviations" message={error} />;
+  if (error) return <ErrorState title={`Couldn’t load ${label.toLowerCase()}`} message={error} />;
   if (!terms) return <ReadingSkeleton />;
 
   return (
@@ -36,14 +43,14 @@ export default function GlossaryPage() {
       <header className="mb-8 border-b pb-6">
         <p className="mb-3 text-[13px] font-semibold tracking-wide text-primary">Reference</p>
         <h1 className="font-serif text-[2.75rem] font-medium leading-tight tracking-[-0.015em]">
-          Abbreviations
+          {label}
         </h1>
         {terms.length > 8 && (
           <div className="relative mt-6 max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
-              aria-label="Filter abbreviations"
+              aria-label={`Filter ${label.toLowerCase()}`}
               placeholder={`Filter ${terms.length} terms…`}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -53,19 +60,24 @@ export default function GlossaryPage() {
         )}
       </header>
       {shown.length === 0 ? (
-        <EmptyState title="No terms" description={terms.length ? "Nothing matches that filter." : "This book has no abbreviations."} />
+        <EmptyState title="No terms" description={terms.length ? "Nothing matches that filter." : `This book has no ${label.toLowerCase()}.`} />
       ) : (
         <dl className="divide-y">
-          {shown.map((t, i) => (
+          {shown.slice(0, MAX_LISTED).map((t, i) => (
             <div key={i} className="grid gap-1 py-3.5 sm:grid-cols-[10rem_1fr] sm:gap-6">
               <dt className="font-mono text-[14px] font-semibold text-primary">{t.term}</dt>
               <dd
                 className="font-serif text-[17px] leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: t.expansion }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(t.expansion) }}
               />
             </div>
           ))}
         </dl>
+      )}
+      {shown.length > MAX_LISTED && (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Showing the first {MAX_LISTED} of {shown.length} terms. Type in the filter above to find one.
+        </p>
       )}
     </article>
   );

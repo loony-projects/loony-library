@@ -164,7 +164,7 @@ function BookSidebar({ book, bookSlug, toc, error, editor, onCreate, tocHandlers
           className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
         >
           <BookText className="size-4 text-muted-foreground" />
-          Abbreviations
+          {book?.category_slug?.includes("glossary") ? "All terms" : "Abbreviations"}
         </Link>
         {toc && editor && (
           <button
@@ -488,7 +488,7 @@ export default function Layout() {
           tabIndex={-1}
         >
           <div className="mx-auto w-full max-w-[44rem]">
-            <Outlet context={{ toc, refresh }} />
+            <Outlet context={{ toc, refresh, book }} />
           </div>
         </main>
       </div>

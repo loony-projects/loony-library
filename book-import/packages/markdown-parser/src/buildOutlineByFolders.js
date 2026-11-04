@@ -44,6 +44,10 @@ const NUMBERED = /^(\d{2,3})_(.+)$/;
 // P2-03_<Title>: chapter 3 of part 2, numbered as printed (each part starts
 // at 1); P2-00_<Title> is part 2 itself - its title and opening pages.
 const PART_CHAPTER = /^P(\d+)-(\d{2,3})_(.+)$/i;
+// a/, b/ ...: a dictionary's letters; each is an unnumbered chapter ("A").
+const LETTER_DIR = /^[a-z]$/i;
+// Converter output parked beside the book's folders, not a chapter.
+const IMAGES_DIR = /^\d*_?images$/i;
 const CHAPTER_DIR = /^Chapter_(\d+)_(.+)$/i;
 const FRONT = /^front[_ ]?(?:pages?|matter)$/i;
 const BACK = /^(?:back|end|last)[_ ]?(?:pages?|matter)$/i;
@@ -57,7 +61,7 @@ const ROLE_ORDER = Object.keys(ROLES);
 // The front/back matter role an unnumbered folder's name gives:
 // Preface -> preface, Chapters -> toc, Index_Symbols -> index.
 function folderRole(name) {
-  if (NUMBERED.test(name) || CHAPTER_DIR.test(name) || PART_CHAPTER.test(name)) return null;
+  if (NUMBERED.test(name) || CHAPTER_DIR.test(name) || PART_CHAPTER.test(name) || LETTER_DIR.test(name)) return null;
   if (FRONT.test(name)) return "front_matter";
   if (BACK.test(name)) return "back_matter";
   const words = name.toLowerCase().split(/[_\s-]+/).filter(Boolean);
@@ -90,7 +94,8 @@ function topEntries(root) {
   const listed = [];
   const loose = [];
   for (const e of entries) {
-    if (e.isDirectory() && (NUMBERED.test(e.name) || PART_CHAPTER.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name) || folderRole(e.name))) listed.push({ name: e.name, dir: true });
+    if (e.isDirectory() && IMAGES_DIR.test(e.name)) continue;
+    if (e.isDirectory() && (NUMBERED.test(e.name) || PART_CHAPTER.test(e.name) || LETTER_DIR.test(e.name) || CHAPTER_DIR.test(e.name) || isMatter(e.name) || folderRole(e.name))) listed.push({ name: e.name, dir: true });
     else if (e.isFile() && e.name.endsWith(".md")) {
       if (NUMBERED.test(e.name) && isMatter(e.name)) listed.push({ name: e.name, dir: false });
       else if (!/^readme\.md$/i.test(e.name)) loose.push(e.name);
@@ -475,6 +480,15 @@ export function buildOutlineByFolders(root, { diagnostics }) {
   for (const { name: entry, dir: isDir } of top.listed) {
     const division = matterOf(entry);
     if (!division) {
+      if (LETTER_DIR.test(entry)) {
+        const element = chapterElement(entry, entry.toUpperCase(), chapterContent(root, entry, diagnostics));
+        element.role = "chapter";
+        element.number = null;
+        element.title = entry.toUpperCase();
+        element.isLetter = true;
+        elements.push(element);
+        continue;
+      }
       const partChapter = entry.match(PART_CHAPTER);
       if (partChapter) {
         const [, partNo, nn, folderName] = partChapter;

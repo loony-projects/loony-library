@@ -4,6 +4,7 @@ import { buildOutlineByToc, slugify } from "./buildOutlineByToc.js";
 import { buildOutlineByFolders, hasBookFolders } from "./buildOutlineByFolders.js";
 import { findManifest, ManifestError } from "./manifest.js";
 import { UsageError } from "./errors.js";
+import { normalizeGlossary } from "./glossaryBook.js";
 import { parseFile } from "./parseFile.js";
 import { collectTerms } from "./extractTermList.js";
 import { finalizeOutline } from "./finalize.js";
@@ -135,7 +136,9 @@ export function parseBookDirectory(dir, overrides = {}) {
   const book = bookMetadata(sourceDir, entries.map((e) => e.name), overrides, diagnostics, manifest?.data);
 
   if (hasBookFolders(sourceDir)) {
-    return assemble(book, buildOutlineByFolders(sourceDir, { diagnostics }), diagnostics);
+    const chapters = buildOutlineByFolders(sourceDir, { diagnostics });
+    const terms = manifest?.data.glossary ? normalizeGlossary(chapters, diagnostics) : [];
+    return assemble(book, chapters, diagnostics, terms);
   }
 
   const files = entries
@@ -167,8 +170,9 @@ function buildReferences(termSources, diagnostics) {
   return { glossary, symbols };
 }
 
-function assemble(book, chapters, diagnostics) {
+function assemble(book, chapters, diagnostics, extraTerms = []) {
   const { codeBlocks, termSources } = finalizeOutline(chapters, { diagnostics });
+  termSources.glossary.push(...extraTerms);
   const { glossary, symbols } = buildReferences(termSources, diagnostics);
   return { book, chapters, glossary, symbols, codeBlocks, diagnostics: diagnostics.list };
 }
