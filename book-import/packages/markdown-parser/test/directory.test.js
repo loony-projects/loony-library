@@ -172,3 +172,25 @@ test("matter folders are title-cased, a back_cover folder is back matter, and a 
   assert.deepEqual(result.chapters.at(0).sections.map((s) => s.title), ["Front Matter"]);
   assert.deepEqual(result.chapters.at(-1).sections.map((s) => s.title), ["Back Cover"]);
 });
+
+test("chapter folders repeating their part's title, and hidden template text in headings", () => {
+  const dir = tempTree({
+    "01_Part_I_The_Web/p1.md": "## PART I The Web\n",
+    "02_Part_I_The_Web_Overview/p2.md": "## Chapter 1This is the Title of the Book CHAPTER 1 Overview\n\nText.\n",
+    "03_Part_I_The_Web_Proxies/p3.md": "# Chapter 2 CHAPTER 2 Proxies\n\nText.\n",
+    "04_Part_I_The_Web_Caching/p4.md": "## Caching\n\nText.\n",
+    "05_Part_II_Appendixes/p5.md": "## PART II Appendixes\n",
+    "06_Part_II_Appendixes_Appendix_A_Schemes/p6.md": "## Appendix AThis is the Title of the Book APPENDIX A Schemes\n\nText.\n",
+    "07_Part_II_Appendixes_Appendix_B_Base-64/p7.md": "## Base-64\n\nText.\n",
+  });
+  const result = parseBookDirectory(dir);
+  assert.deepEqual(result.chapters.map((c) => [c.role, c.number, c.title]), [
+    ["part", "I", "The Web"],
+    ["chapter", "1", "Overview"],
+    ["chapter", "2", "Proxies"],
+    ["chapter", "3", "Caching"],
+    ["part", "II", "Appendixes"],
+    ["appendix", "A", "Schemes"],
+    ["appendix", "B", "Base-64"],
+  ]);
+});

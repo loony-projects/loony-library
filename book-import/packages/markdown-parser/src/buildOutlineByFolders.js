@@ -138,7 +138,16 @@ function allPageFiles(root, relDir) {
   return merged.flatMap((e) => (e.dir ? allPageFiles(root, path.join(relDir, e.name)) : [path.join(relDir, e.name)]));
 }
 
-const readFiles = (root, rels, diagnostics) => rels.map((rel) => ({ file: rel, items: parseFile(fs.readFileSync(path.join(root, rel), "utf8"), { file: rel, diagnostics }) }));
+// Hidden template text a PDF's text layer put before a chapter's real heading:
+// "Chapter 1This is the Title of the Book CHAPTER 1 Overview of HTTP", or
+// "Chapter 11 CHAPTER 11 Client Identification and Cookies".
+const HEADING_LEFTOVER = /^.*?This is the Title of the Book\s*|^(?:Chapter|Appendix)\s+\S+\s+(?=(?:CHAPTER|APPENDIX)\b)/;
+function readPage(root, rel, diagnostics) {
+  const items = parseFile(fs.readFileSync(path.join(root, rel), "utf8"), { file: rel, diagnostics });
+  for (const item of items) if (item.kind === "heading") item.title = item.title.replace(HEADING_LEFTOVER, "");
+  return { file: rel, items };
+}
+const readFiles = (root, rels, diagnostics) => rels.map((rel) => readPage(root, rel, diagnostics));
 
 const titleFromName = (name) => name.replace(NUMBERED, "$2").replace(/_+/g, " ").trim();
 
@@ -162,7 +171,7 @@ function numberAndTitle(item) {
 function readPages(root, relDir, files, diagnostics) {
   return files.map((file) => {
     const rel = path.join(relDir, file);
-    return { file: rel, items: parseFile(fs.readFileSync(path.join(root, rel), "utf8"), { file: rel, diagnostics }) };
+    return readPage(root, rel, diagnostics);
   });
 }
 
@@ -417,12 +426,15 @@ export function buildOutlineByFolders(root, { diagnostics }) {
     const chapterDir = name.match(CHAPTER_DIR);
     const partMatch = chapterDir ? null : name.match(PART_LABEL);
     const partLabel = partMatch ? partMatch[1] : null;
-    const folderTitle = titleFromName(chapterDir ? chapterDir[2] : partMatch ? partMatch[2] : name);
+    // Part_I_<Part title>_<Chapter title>: the chapter is only what follows its part's title.
+    const partTitle = partLabel ? parts.get(partLabel)?.title : null;
+    const unprefixed = partMatch && partTitle && titleFromName(partMatch[2]).startsWith(`${partTitle} `) ? titleFromName(partMatch[2]).slice(partTitle.length + 1) : null;
+    const folderTitle = unprefixed ?? titleFromName(chapterDir ? chapterDir[2] : partMatch ? partMatch[2] : name);
     const firstPages = opening.length ? opening : units[0]?.pages ?? [];
     const firstHeading = firstPages[0]?.items.find((item) => item.kind === "heading");
     const firstText = firstHeading ? headingText(firstHeading) : "";
 
-    const appendixLabel = (name.match(APPENDIX) ?? firstText.match(/^appendix\s+([a-z0-9]+)\b/i))?.[1]?.toUpperCase() ?? null;
+    const appendixLabel = (name.match(APPENDIX) ?? (unprefixed && unprefixed.replace(/ /g, "_").match(APPENDIX)) ?? firstText.match(/^appendix\s+([a-z0-9]+)\b/i))?.[1]?.toUpperCase() ?? null;
     // A part: a Part_ folder (or one titled by its part heading) holding just the part's page.
     const listedPart = !units.length && !chapterDir ? listedParts.get(key(folderTitle)) : undefined;
     const isPart = listedPart !== undefined || (/^part\b/i.test(firstText) && !units.length && (Boolean(partLabel) || key(firstText).includes(key(folderTitle))));
