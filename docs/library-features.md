@@ -16,9 +16,11 @@ are the upgrade time because their original creation dates were never stored.
 Existing language values start as `und` (undetermined).
 
 Accounts live in loony-auth (`~/projects/loony-auth`):
-**Sign in** sends the browser to loony-auth's hosted sign-in page (OAuth 2.1
+**Sign in with Loony** sends the browser to loony-auth's hosted sign-in page, where anyone can use or create a personal Loony account (OAuth 2.1
 authorization code + PKCE, OpenID Connect), and the first sign-in creates the
-library's own user row (matched by loony-auth's subject). loony-auth must be
+library's own user row (matched by loony-auth's subject). An account from
+before Sign in with Loony is linked once to the Loony account with the same
+verified email, keeping its role and reading data. loony-auth must be
 running - `scripts/start.sh` starts it. Grant an account editor access from
 the server once it has signed in:
 

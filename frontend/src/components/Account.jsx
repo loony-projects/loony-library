@@ -43,11 +43,23 @@ export function AccountProvider({ children }) {
   );
 }
 
+// The Loony mark on the sign-in button.
+function LoonyMark() {
+  return (
+    <span
+      aria-hidden
+      className="flex size-4 items-center justify-center rounded-[4px] bg-primary text-[10px] leading-none font-bold text-primary-foreground"
+    >
+      L
+    </span>
+  );
+}
+
 // Navbar account control: a sign-in button, or the signed-in user's menu.
 export default function AccountMenu() {
   const { user, setUser, ready, authError } = useAccount();
   if (!ready) return <div className="size-9" aria-hidden />;
-  // Sign-in happens on loony-auth's hosted page: a full-page navigation to
+  // Sign in with Loony happens on loony-auth's hosted page: a full-page navigation to
   // the backend, which redirects there and back.
   if (!user)
     return (
@@ -58,7 +70,12 @@ export default function AccountMenu() {
           </span>
         )}
         <Button size="sm" variant="outline" asChild>
-          <a href={`${API_URL}/api/auth/login`}>Sign in</a>
+          <a href={`${API_URL}/api/auth/login`} aria-label="Sign in with Loony">
+            <LoonyMark />
+            {/* The full wording doesn't fit the navbar on a phone. */}
+            <span className="sm:hidden">Sign in</span>
+            <span className="hidden sm:inline">Sign in with Loony</span>
+          </a>
         </Button>
       </>
     );

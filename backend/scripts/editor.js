@@ -11,7 +11,7 @@ if (!email) {
   console.log(
     rowCount
       ? "Editor access granted"
-      : "No account with that email. Sign in once with loony-auth first.",
+      : "No account with that email. Sign in once with Loony first.",
   );
   if (!rowCount) process.exitCode = 1;
 }

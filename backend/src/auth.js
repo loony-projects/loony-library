@@ -1,5 +1,6 @@
-// Sign-in is delegated to loony-auth (OAuth 2.1 authorization code + PKCE,
-// OpenID Connect). The browser is sent to loony-auth's hosted sign-in page;
+// "Sign in with Loony": sign-in is delegated to loony-auth (OAuth 2.1
+// authorization code + PKCE, OpenID Connect), using the personal Loony accounts
+// anyone can create there. The browser is sent to loony-auth's hosted sign-in page;
 // this server only ever sees a one-time code, which it exchanges using its
 // client credentials. After verifying the ID token it keeps its own session
 // (the `sessions` table + `session` cookie) exactly as before, and the
@@ -67,12 +68,11 @@ function config() {
   const cfg = {
     authUrl: (process.env.LOONY_AUTH_URL || "http://localhost:8450").replace(/\/+$/, ""),
     clientId: process.env.CLIENT_ID,
-    tenantId: process.env.TENANT_ID,
     secret: process.env.SECRET_KEY,
   };
-  if (!cfg.clientId || !cfg.tenantId || !cfg.secret)
+  if (!cfg.clientId || !cfg.secret)
     throw Object.assign(
-      new Error("CLIENT_ID, TENANT_ID and SECRET_KEY must be set (see .env.example)"),
+      new Error("CLIENT_ID and SECRET_KEY must be set (see .env.example)"),
       { status: 503 },
     );
   return cfg;
@@ -210,10 +210,7 @@ authRouter.get("/auth/callback", async (req, res, next) => {
     const id = await verify(tokens.id_token);
     const access = await verify(tokens.access_token);
     if (!sameString(id.nonce, tx.nonce)) return fail("invalid_nonce");
-    // The client is already bound to one organization in loony-auth; this
-    // is defense in depth that the user really belongs to our tenant.
-    if (access.org_id !== cfg.tenantId || access.sub !== id.sub)
-      return fail("wrong_tenant");
+    if (access.sub !== id.sub) return fail("invalid_token");
     // Only the ID token's identity is used; the refresh token isn't needed.
     if (tokens.refresh_token && meta.revocation_endpoint)
       fetch(meta.revocation_endpoint, {
@@ -231,6 +228,16 @@ authRouter.get("/auth/callback", async (req, res, next) => {
     const email = typeof id.email === "string" ? id.email.toLowerCase() : "";
     const name =
       (typeof id.name === "string" && id.name.trim()) || email.split("@")[0] || "Reader";
+    // An account from before Sign in with Loony: hand it to this subject,
+    // once, if loony-auth has verified that they own its email.
+    if (id.email_verified === true && email)
+      await pool.query(
+        `update users set auth_subject=$1, relink_by_email=false
+         where id=(select id from users where relink_by_email and lower(email)=$2
+                   order by created_at limit 1)
+           and not exists (select 1 from users where auth_subject=$1)`,
+        [id.sub, email],
+      );
     const { rows } = await pool.query(
       `insert into users(auth_subject,email,name) values($1,$2,$3)
        on conflict (auth_subject) do update set email=excluded.email, name=excluded.name
@@ -301,7 +308,7 @@ authRouter.get("/auth/logged-out", (req, res) => {
 });
 
 // "Account security" in the account menu: loony-auth's own page for phones,
-// authenticator apps and recovery codes, for this app's organization.
+// authenticator apps and recovery codes.
 authRouter.get("/auth/account", (req, res, next) => {
   try {
     const cfg = config();

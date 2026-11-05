@@ -16,7 +16,7 @@ that workspace first:
 (cd book-import && npm install)
 cd backend
 npm install
-cp .env.example .env   # set DATABASE_URL, plus CLIENT_ID / TENANT_ID / SECRET_KEY from loony-auth
+cp .env.example .env   # set DATABASE_URL, plus CLIENT_ID / SECRET_KEY from loony-auth
 npm run migrate          # includes 004: parser block types + chapter/section roles
 npm start                # http://localhost:4000
 ```
