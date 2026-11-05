@@ -334,6 +334,8 @@
     background: var(--muted);
     border: 1px solid var(--border);
     overflow: hidden;
+    /* It's a <figure>, and figures are centred below. */
+    text-align: left;
   }
   .reading .block-code-frame .block-code {
     margin: 0;

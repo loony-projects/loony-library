@@ -18,6 +18,7 @@ test("read a book: library, book, chapter, section, code block, search", async (
   await expect(page.getByText('print("hello from loony")')).toBeVisible();
   await expect(page.locator(".block-code-lang")).toHaveText(/python/i);
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();
+  await expect(page.locator("pre.block-code")).toHaveCSS("text-align", "left");
 
   // Math renders with KaTeX - inline and display - and prices stay text.
   const math = page.locator(".reading .katex");
