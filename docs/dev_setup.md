@@ -23,7 +23,7 @@ npm start                # http://localhost:4000
 
 Sanity check: `curl http://localhost:4000/api/health` → `{"ok":true}`.
 
-Sign-in goes through loony-auth, so its `auth-api` has to be running (default `http://localhost:8450`) with this app registered as an OAuth client whose redirect URI is `http://localhost:4000/api/auth/callback`. See [backend/README.md](../backend/README.md#sign-in-loony-auth).
+Sign-in goes through loony-auth, so its `auth-api` has to be running (default `http://localhost:2001`) with this app registered as an OAuth client whose redirect URI is `http://localhost:4000/api/auth/callback`. See [backend/README.md](../backend/README.md#sign-in-loony-auth).
 
 ## 3. Frontend
 
@@ -49,11 +49,11 @@ scripts/stop.sh             # stop them (or: scripts/stop.sh auth | backend | fr
 `start.sh` waits until each app answers (loony-auth's `/ready`, `/api/health`,
 then the Vite page) and says where it's running; logs are in `.run/auth.log`,
 `.run/backend.log` and `.run/frontend.log`. Ports: loony-auth from
-`LOONY_AUTH_URL` in `backend/.env` (8450), backend `PORT` (4000), frontend
+`LOONY_AUTH_URL` in `backend/.env` (2001), backend `PORT` (4000), frontend
 `FRONTEND_PORT` (default 5173). Running `start.sh` again while an app is up does
 nothing; `stop.sh <app>` also stops an app started by hand on its port.
 
-loony-auth is found at `LOONY_AUTH_DIR` (default `~/projects/loony-auth`).
+loony-auth is found at `LOONY_AUTH_DIR` (default `~/ai/loony-auth`).
 Before starting it, `start.sh` applies its pending database migrations with
 `sqlx migrate run` - an unapplied migration makes its hosted sign-in page fail
 with "Something went wrong". Its first start compiles it (up to 5 minutes). If
@@ -84,7 +84,7 @@ The library is published at **https://books.lovegood.in** and loony-auth at
 
 ```yaml
   - hostname: auth.lovegood.in
-    service: http://127.0.0.1:8450      # loony-auth's auth-api
+    service: http://127.0.0.1:2001      # loony-auth's auth-api
   - hostname: books.lovegood.in
     service: http://127.0.0.1:4000      # this backend: frontend + API + images
 ```

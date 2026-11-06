@@ -15,7 +15,7 @@ preserves existing books and sections as published. Their `created_at` values
 are the upgrade time because their original creation dates were never stored.
 Existing language values start as `und` (undetermined).
 
-Accounts live in loony-auth (`~/projects/loony-auth`):
+Accounts live in loony-auth (`~/ai/loony-auth`):
 **Sign in with Loony** sends the browser to loony-auth's hosted sign-in page, where anyone can use or create a personal Loony account (OAuth 2.1
 authorization code + PKCE, OpenID Connect), and the first sign-in creates the
 library's own user row (matched by loony-auth's subject). An account from

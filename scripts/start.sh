@@ -3,14 +3,14 @@
 #
 #   scripts/start.sh            # all three
 #   scripts/start.sh auth       # loony-auth's auth-api (LOONY_AUTH_PORT, default
-#                               #   8450), after applying its pending database
+#                               #   2001), after applying its pending database
 #                               #   migrations
 #   scripts/start.sh backend    # API (PORT from backend/.env, default 4000), which
 #                               #   also serves the built frontend - rebuilt here
 #                               #   when its source changed - for the public site
 #   scripts/start.sh frontend   # Vite dev server (FRONTEND_PORT, default 5173)
 #
-# loony-auth is found at LOONY_AUTH_DIR (default ~/projects/loony-auth); sign-in
+# loony-auth is found at LOONY_AUTH_DIR (default ~/ai/loony-auth); sign-in
 # needs it. Without it the library still starts, read-only for visitors.
 #
 # Logs go to .run/<app>.log, the process group id to .run/<app>.pid.
@@ -27,10 +27,10 @@ backend_port() {
   echo "${port:-4000}"
 }
 frontend_port() { echo "${FRONTEND_PORT:-5173}"; }
-auth_dir() { echo "${LOONY_AUTH_DIR:-$HOME/projects/loony-auth}"; }
+auth_dir() { echo "${LOONY_AUTH_DIR:-$HOME/ai/loony-auth}"; }
 # loony-auth's local port (LOONY_AUTH_URL in backend/.env is its public URL,
 # e.g. https://auth.lovegood.in, so it doesn't say).
-auth_port() { echo "${LOONY_AUTH_PORT:-8450}"; }
+auth_port() { echo "${LOONY_AUTH_PORT:-2001}"; }
 
 listening() { lsof -ti:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
@@ -79,7 +79,7 @@ start_auth() {
   local dir port
   dir="$(auth_dir)"
   port="$(auth_port)"
-  if [ ! -x "$dir/scripts/auth-api.sh" ]; then
+  if [ ! -x "$dir/loony" ]; then
     echo "auth: loony-auth not found at $dir (set LOONY_AUTH_DIR) - sign-in won't work" >&2
     return 0
   fi
@@ -97,7 +97,7 @@ start_auth() {
     echo "auth: sqlx not installed - pending loony-auth migrations not applied" >&2
   fi
   # The first start compiles it, which takes a while.
-  START_TIMEOUT=300 start auth "$dir" "$port" "http://localhost:$port/ready" env SERVER_PORT="$port" scripts/auth-api.sh
+  START_TIMEOUT=300 start auth "$dir" "$port" "http://localhost:$port/ready" env AUTH_API_PORT="$port" ./loony run auth-api
 }
 
 # The frontend build the backend serves on its own origin (the public site,

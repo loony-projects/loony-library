@@ -66,7 +66,7 @@ function redirectUriFor(req) {
 
 function config() {
   const cfg = {
-    authUrl: (process.env.LOONY_AUTH_URL || "http://localhost:8450").replace(/\/+$/, ""),
+    authUrl: (process.env.LOONY_AUTH_URL || "http://localhost:2001").replace(/\/+$/, ""),
     clientId: process.env.CLIENT_ID,
     secret: process.env.SECRET_KEY,
   };
