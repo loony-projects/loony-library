@@ -29,7 +29,7 @@ yarn-error.log*
 # OS
 .DS_Store
 
-# Logs and pid files from scripts/start.sh
+# Logs and pid files from ./loony
 .run/
 
 # Backups of env files (they hold secrets)

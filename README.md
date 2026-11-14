@@ -64,8 +64,8 @@ docker compose restart backend    # after reloading a book that was already ther
 `VITE_API_URL` is compiled into the frontend image - rebuild after changing it.
 Files: [docker-compose.yml](docker-compose.yml), [docker/](docker/), [.env.example](.env.example).
 
-For running without Docker, `scripts/start.sh` / `scripts/stop.sh` start and stop
-the dev servers - see [docs/dev_setup.md](docs/dev_setup.md#starting-and-stopping).
+For running without Docker, `./loony start` / `./loony stop` / `./loony status` run
+the dev servers (`./loony help` lists every command) - see [docs/dev_setup.md](docs/dev_setup.md#starting-and-stopping).
 
 ## Adding a book
 

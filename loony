@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+#
+# Runs the library on this machine.
+#
+# Usage: ./loony <command> [args...]
+#
+# Running it
+#   start [service...]    Start in the background and wait until they answer
+#                         (default: all three)
+#   stop [service...]     Stop (default: frontend and backend, and loony-auth
+#                         if ./loony started it - other apps may share it)
+#   restart [service...]  Stop, then start (default: same as stop)
+#   status                Show what's running, where, and its log
+#   logs <service>        Follow a service's log
+#
+# Building and checking
+#   install               npm install in every package, and Playwright's
+#                         Chromium for the browser tests
+#   build-apps            Build the frontend the backend serves (start does
+#                         this itself when the frontend's source changed)
+#   lint                  Lint the frontend
+#   test [part...]        Unit tests: backend, frontend, book-import,
+#                         unmangler (default: all four)
+#   e2e [args]            Browser tests, on their own server and schema; args
+#                         go to playwright test, e.g. --headed
+#
+# Database and accounts
+#   migrate               Apply pending library database migrations
+#   editor <email>        Give an account editor access (it must have signed
+#                         in once)
+#
+# Books (args go to the tool, see docs/migration.md). Except for import, the
+# book is the one in UPLOAD_BOOK_PATH, book-import/.env.
+#   book dry-run [args]   Parse it and write book-import/book-output.md
+#   book load [args]      Load it into the library (--reset: replace it)
+#   book reload [args]    Re-import it, keeping readers' notes and progress
+#   book organize [args]  Split chapter folders into sections (--apply)
+#   book import <folder> [--apply]
+#                         Check every book under <folder>; --apply loads the
+#                         new ones and reloads the rest
+#
+# Services:
+#   auth      loony-auth's auth-api (LOONY_AUTH_PORT, default 2001), after
+#             applying its pending database migrations. Found at
+#             LOONY_AUTH_DIR (default ~/ai/loony-auth); without it the
+#             library still starts, without sign-in.
+#   backend   the API (PORT in backend/.env, default 4000), which also serves
+#             the built frontend for the public site
+#   frontend  the Vite dev server (FRONTEND_PORT, default 5173)
+#
+# Logs go to .run/<service>.log, the process group id to .run/<service>.pid.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN_DIR="$ROOT/.run"
+SERVICES=(auth backend frontend)
+
+usage() {
+  sed -n '3,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
+}
+
+backend_port() {
+  local port
+  port="$(grep -E '^PORT=' "$ROOT/backend/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]"' || true)"
+  echo "${port:-4000}"
+}
+frontend_port() { echo "${FRONTEND_PORT:-5173}"; }
+auth_dir() { echo "${LOONY_AUTH_DIR:-$HOME/ai/loony-auth}"; }
+# loony-auth's local port (LOONY_AUTH_URL in backend/.env is its public URL,
+# e.g. https://auth.lovegood.in, so it doesn't say).
+auth_port() { echo "${LOONY_AUTH_PORT:-2001}"; }
+
+port_of() {
+  case "$1" in
+    auth) auth_port ;;
+    backend) backend_port ;;
+    frontend) frontend_port ;;
+  esac
+}
+
+listeners() { lsof -ti:"$1" -sTCP:LISTEN 2>/dev/null || true; }
+listening() { [ -n "$(listeners "$1")" ]; }
+
+# Sets PICKED to the named services, or the defaults when none are named.
+# Exits on a name it doesn't know (run directly, not in $(...), so it can).
+pick() {
+  local default="$1"
+  shift
+  [ "$#" -eq 0 ] && set -- $default
+  for s in "$@"; do
+    case " ${SERVICES[*]} " in
+      *" $s "*) ;;
+      *) echo "unknown service '$s' (services: ${SERVICES[*]})" >&2; exit 2 ;;
+    esac
+  done
+  PICKED=("$@")
+}
+
+# launch <name> <dir> <port> <ready-url> <command...>
+# START_TIMEOUT (seconds, default 60) bounds the wait for <ready-url>.
+launch() {
+  local name="$1" dir="$2" port="$3" url="$4" timeout="${START_TIMEOUT:-60}"
+  shift 4
+  local log="$RUN_DIR/$name.log" pidfile="$RUN_DIR/$name.pid"
+  mkdir -p "$RUN_DIR"
+
+  if listening "$port"; then
+    echo "$name: already running on port $port"
+    return 0
+  fi
+  if [ -f "$dir/package.json" ] && [ ! -d "$dir/node_modules" ]; then
+    echo "$name: dependencies missing - run 'npm install' in ${dir#"$ROOT"/}" >&2
+    return 1
+  fi
+
+  # setsid gives the app its own process group, so stop can stop npm and the
+  # server it spawned together. `exec` replaces the subshell, so $! is the app
+  # itself (its pid is its group id) and no shell lingers holding this
+  # script's stdout open.
+  (cd "$dir" && exec setsid "$@" >"$log" 2>&1 < /dev/null) &
+  echo $! >"$pidfile"
+
+  local waited=0
+  until curl -sf -o /dev/null "$url"; do
+    if ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+      echo "$name: exited during startup - last log lines:" >&2
+      tail -n 20 "$log" >&2
+      rm -f "$pidfile"
+      return 1
+    fi
+    if [ "$waited" -ge "$timeout" ]; then
+      echo "$name: not answering at $url after ${timeout}s - see ${log#"$ROOT"/}" >&2
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "$name: running at http://localhost:$port (log: ${log#"$ROOT"/})"
+}
+
+start_auth() {
+  local dir port
+  dir="$(auth_dir)"
+  port="$(auth_port)"
+  if [ ! -x "$dir/loony" ]; then
+    echo "auth: loony-auth not found at $dir (set LOONY_AUTH_DIR) - sign-in won't work" >&2
+    return 0
+  fi
+  if listening "$port"; then
+    echo "auth: already running on port $port"
+    return 0
+  fi
+  # Its code may expect migrations not yet applied (a missing column makes
+  # every hosted sign-in page fail), so bring the database up to date first.
+  if command -v sqlx >/dev/null 2>&1; then
+    local db
+    db="$(grep -E '^DATABASE_URL=' "$dir/.env" | tail -1 | cut -d= -f2- | tr -d '"')"
+    (cd "$dir" && sqlx migrate run --database-url "$db" --source migrations) | sed 's/^/auth: /'
+  else
+    echo "auth: sqlx not installed - pending loony-auth migrations not applied" >&2
+  fi
+  # The first start compiles it, which takes a while.
+  START_TIMEOUT=300 launch auth "$dir" "$port" "http://localhost:$port/ready" env AUTH_API_PORT="$port" ./loony run auth-api
+}
+
+# The frontend build the backend serves on its own origin (the public site,
+# https://books.lovegood.in): API calls relative to the page. Rebuilt when
+# anything it's built from is newer than the last build, or always with
+# --force.
+build_frontend() {
+  local dir="$ROOT/frontend" index="$ROOT/frontend/dist/index.html"
+  [ -d "$dir/node_modules" ] || { echo "frontend: dependencies missing - run 'npm install' in frontend" >&2; return 1; }
+  if [ "${1:-}" != "--force" ] && [ -f "$index" ] && [ -z "$(find "$dir/src" "$dir/public" "$dir/index.html" "$dir"/vite.config.* "$dir/package.json" -newer "$index" -print -quit 2>/dev/null)" ]; then
+    return 0
+  fi
+  mkdir -p "$RUN_DIR"
+  echo "frontend: building for the backend to serve (log: .run/frontend-build.log)"
+  if ! (cd "$dir" && VITE_API_URL= npm run build) >"$RUN_DIR/frontend-build.log" 2>&1; then
+    echo "frontend: build failed - see .run/frontend-build.log" >&2
+    return 1
+  fi
+}
+
+start_backend() {
+  local port
+  build_frontend || true
+  port="$(backend_port)"
+  launch backend "$ROOT/backend" "$port" "http://localhost:$port/api/health" npm start
+}
+
+start_frontend() {
+  local port
+  port="$(frontend_port)"
+  launch frontend "$ROOT/frontend" "$port" "http://localhost:$port" npm run dev -- --port "$port" --strictPort
+}
+
+start_one() {
+  case "$1" in
+    auth) start_auth ;;
+    backend) start_backend ;;
+    frontend) start_frontend ;;
+  esac
+}
+
+# Stops the service's whole process group (npm and the server it spawned),
+# waiting up to 10s before forcing it. Without a pid file (started some other
+# way), stops whatever is listening on its port.
+stop_one() {
+  local name="$1" port pidfile="$RUN_DIR/$1.pid"
+  port="$(port_of "$1")"
+  local targets=()
+
+  if [ -f "$pidfile" ]; then
+    local pgid
+    pgid="$(cat "$pidfile")"
+    if kill -0 -- "-$pgid" 2>/dev/null; then targets+=("-$pgid"); fi
+  fi
+  for pid in $(listeners "$port"); do targets+=("$pid"); done
+
+  if [ "${#targets[@]}" -eq 0 ]; then
+    echo "$name: not running"
+    rm -f "$pidfile"
+    return 0
+  fi
+
+  kill -TERM -- "${targets[@]}" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    if ! listening "$port" && ! kill -0 -- "${targets[0]}" 2>/dev/null; then
+      rm -f "$pidfile"
+      echo "$name: stopped"
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  kill -KILL -- "${targets[@]}" 2>/dev/null || true
+  for pid in $(listeners "$port"); do kill -KILL "$pid" 2>/dev/null || true; done
+  rm -f "$pidfile"
+  echo "$name: forced to stop after 10s"
+}
+
+# With nothing named: frontend and backend, and loony-auth only if ./loony
+# started it, since other apps may share it.
+default_stop() {
+  local list="frontend backend"
+  [ -f "$RUN_DIR/auth.pid" ] && list="$list auth"
+  echo "$list"
+}
+
+cmd_start() {
+  local failed=0
+  pick "${SERVICES[*]}" "$@"
+  for s in "${PICKED[@]}"; do start_one "$s" || failed=1; done
+  return "$failed"
+}
+
+cmd_stop() {
+  pick "$(default_stop)" "$@"
+  for s in "${PICKED[@]}"; do stop_one "$s"; done
+}
+
+cmd_restart() {
+  local failed=0
+  pick "$(default_stop)" "$@"
+  for s in "${PICKED[@]}"; do stop_one "$s"; done
+  # Start in the usual order, whatever order they were named in.
+  for s in "${SERVICES[@]}"; do
+    case " ${PICKED[*]} " in *" $s "*) start_one "$s" || failed=1 ;; esac
+  done
+  return "$failed"
+}
+
+cmd_status() {
+  printf '%-9s %-8s %-6s %-8s %s\n' SERVICE STATE PORT PID LOG
+  for s in "${SERVICES[@]}"; do
+    local port pidfile="$RUN_DIR/$s.pid" state="stopped" pid="-" log="-"
+    port="$(port_of "$s")"
+    if listening "$port"; then
+      if [ -f "$pidfile" ] && kill -0 -- "-$(cat "$pidfile")" 2>/dev/null; then
+        state="running"
+        pid="$(cat "$pidfile")"
+      else
+        # Up, but not started by ./loony (by hand, systemd, another app).
+        state="external"
+        pid="$(listeners "$port" | head -1)"
+      fi
+    elif [ "$s" = auth ] && [ ! -x "$(auth_dir)/loony" ]; then
+      state="missing"
+    fi
+    [ -f "$RUN_DIR/$s.log" ] && log=".run/$s.log"
+    printf '%-9s %-8s %-6s %-8s %s\n' "$s" "$state" "$port" "$pid" "$log"
+  done
+}
+
+# Runs an npm script in a package, passing the rest on to it.
+npm_in() {
+  local dir="$1" script="$2"
+  shift 2
+  [ -d "$ROOT/$dir/node_modules" ] || { echo "$dir: dependencies missing - run ./loony install" >&2; exit 1; }
+  cd "$ROOT/$dir" && exec npm run --silent "$script" -- "$@"
+}
+
+PACKAGES=(backend frontend book-import e2e md-code-unmangler)
+
+cmd_install() {
+  for p in "${PACKAGES[@]}"; do
+    echo "== $p"
+    if [ -f "$ROOT/$p/package-lock.json" ]; then (cd "$ROOT/$p" && npm ci); else (cd "$ROOT/$p" && npm install); fi
+  done
+  echo "== Playwright Chromium"
+  (cd "$ROOT/e2e" && npm run --silent install-browser)
+}
+
+TEST_PARTS=(backend frontend book-import unmangler)
+
+cmd_test() {
+  local failed=()
+  [ "$#" -eq 0 ] && set -- "${TEST_PARTS[@]}"
+  for part in "$@"; do
+    local dir
+    case "$part" in
+      backend | frontend | book-import) dir="$part" ;;
+      unmangler) dir="md-code-unmangler" ;;
+      *) echo "unknown test part '$part' (parts: ${TEST_PARTS[*]}; browser tests: ./loony e2e)" >&2; exit 2 ;;
+    esac
+    echo "== $part"
+    (cd "$ROOT/$dir" && npm test --silent) || failed+=("$part")
+  done
+  if [ "${#failed[@]}" -gt 0 ]; then
+    echo "failed: ${failed[*]}" >&2
+    return 1
+  fi
+  echo "all passed: $*"
+}
+
+cmd_book() {
+  local sub="${1:-}"
+  [ "$#" -gt 0 ] && shift
+  case "$sub" in
+    dry-run | load | reload | import | organize) npm_in book-import "$sub" "$@" ;;
+    *) echo "usage: ./loony book <dry-run|load|reload|import|organize> [args]" >&2; exit 2 ;;
+  esac
+}
+
+cmd_editor() {
+  [ "$#" -eq 1 ] || { echo "usage: ./loony editor <email>" >&2; exit 2; }
+  npm_in backend editor "$1"
+}
+
+cmd_logs() {
+  [ "$#" -eq 1 ] || { echo "usage: ./loony logs <service> (services: ${SERVICES[*]})" >&2; exit 2; }
+  pick "" "$1"
+  local log="$RUN_DIR/$1.log"
+  [ -f "$log" ] || { echo "$1: no log yet (${log#"$ROOT"/})" >&2; exit 1; }
+  exec tail -n 50 -F "$log"
+}
+
+cmd="${1:-help}"
+[ "$#" -gt 0 ] && shift
+case "$cmd" in
+  start) cmd_start "$@" ;;
+  stop) cmd_stop "$@" ;;
+  restart) cmd_restart "$@" ;;
+  status) cmd_status ;;
+  logs) cmd_logs "$@" ;;
+  install) cmd_install ;;
+  build-apps) build_frontend --force && echo "frontend: built (frontend/dist)" ;;
+  lint) npm_in frontend lint "$@" ;;
+  test) cmd_test "$@" ;;
+  e2e) cd "$ROOT/e2e" && node prepare.mjs && exec npx playwright test "$@" ;;
+  migrate) npm_in backend migrate ;;
+  editor) cmd_editor "$@" ;;
+  book) cmd_book "$@" ;;
+  help | -h | --help) usage ;;
+  *)
+    echo "unknown command '$cmd'" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

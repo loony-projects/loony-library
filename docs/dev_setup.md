@@ -38,28 +38,46 @@ Open `http://localhost:5173` — it lists every loaded book; picking one redirec
 
 ## Starting and stopping
 
-Once both are installed and configured, from the repo root:
+Once both are installed and configured, everything runs through `./loony`
+from the repo root (`./loony help` lists it all):
 
 ```sh
-scripts/start.sh            # loony-auth + backend + frontend in the background
-scripts/start.sh backend    # or just one: auth | backend | frontend
-scripts/stop.sh             # stop them (or: scripts/stop.sh auth | backend | frontend)
+./loony start               # loony-auth + backend + frontend in the background
+./loony start backend       # or just some: auth | backend | frontend
+./loony stop                # stop them (or: ./loony stop frontend ...)
+./loony restart backend     # stop, then start
+./loony status              # what's running, on which port, and its log
+./loony logs backend        # follow a log
+
+./loony install             # npm install everywhere, plus Playwright's Chromium
+./loony build-apps          # rebuild the frontend the backend serves
+./loony lint                # lint the frontend
+./loony test                # unit tests (or: ./loony test backend ...)
+./loony e2e                 # browser smoke test (below)
+
+./loony migrate             # apply pending library database migrations
+./loony editor you@example.com
+
+./loony book dry-run        # the book in UPLOAD_BOOK_PATH: parse, load, reload, organize
+./loony book load --reset
+./loony book import <folder> --apply
 ```
 
-`start.sh` waits until each app answers (loony-auth's `/ready`, `/api/health`,
+`start` waits until each service answers (loony-auth's `/ready`, `/api/health`,
 then the Vite page) and says where it's running; logs are in `.run/auth.log`,
-`.run/backend.log` and `.run/frontend.log`. Ports: loony-auth from
-`LOONY_AUTH_URL` in `backend/.env` (2001), backend `PORT` (4000), frontend
-`FRONTEND_PORT` (default 5173). Running `start.sh` again while an app is up does
-nothing; `stop.sh <app>` also stops an app started by hand on its port.
+`.run/backend.log` and `.run/frontend.log`. Ports: loony-auth `LOONY_AUTH_PORT`
+(default 2001), backend `PORT` in `backend/.env` (4000), frontend
+`FRONTEND_PORT` (default 5173). Starting a service that's already up does
+nothing; `stop <service>` also stops one started by hand on its port, and
+`status` shows it as `external`.
 
 loony-auth is found at `LOONY_AUTH_DIR` (default `~/ai/loony-auth`).
-Before starting it, `start.sh` applies its pending database migrations with
+Before starting it, `./loony start` applies its pending database migrations with
 `sqlx migrate run` - an unapplied migration makes its hosted sign-in page fail
 with "Something went wrong". Its first start compiles it (up to 5 minutes). If
-it isn't found, the library starts anyway, without sign-in. Plain
-`scripts/stop.sh` stops loony-auth only if `start.sh` started it, since other
-apps may share it.
+it isn't found, the library starts anyway, without sign-in. A plain
+`./loony stop` (or `restart`) stops loony-auth only if `./loony` started it,
+since other apps may share it.
 
 ## Browser smoke test
 
@@ -68,6 +86,8 @@ cd e2e
 npm install && npm run install-browser   # once: Playwright and Chromium
 npm test
 ```
+
+Or from the repo root: `./loony e2e` (after `./loony install`).
 
 It creates an `e2e` schema in `DATABASE_URL` (from `backend/.env`), runs the
 migrations there, loads the fixture book (`e2e/fixtures/e2e-book`) with
@@ -91,7 +111,7 @@ The library is published at **https://books.lovegood.in** and loony-auth at
 
 One origin serves everything: the backend serves the built frontend
 (`frontend/dist`, built with an empty `VITE_API_URL` so API calls are relative)
-next to `/api` and `/images`, so the session cookie is first-party. `start.sh`
+next to `/api` and `/images`, so the session cookie is first-party. `./loony start`
 rebuilds `frontend/dist` whenever the frontend source is newer than the last
 build. The backend trusts `X-Forwarded-Proto` from cloudflared on loopback, so
 cookies get `Secure` over HTTPS.

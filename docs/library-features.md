@@ -21,12 +21,11 @@ authorization code + PKCE, OpenID Connect), and the first sign-in creates the
 library's own user row (matched by loony-auth's subject). An account from
 before Sign in with Loony is linked once to the Loony account with the same
 verified email, keeping its role and reading data. loony-auth must be
-running - `scripts/start.sh` starts it. Grant an account editor access from
+running - `./loony start` starts it. Grant an account editor access from
 the server once it has signed in:
 
 ```sh
-cd backend
-npm run editor -- your-email@example.com
+./loony editor your-email@example.com
 ```
 
 Every account starts as a reader. Only the operator's CLI can promote an
