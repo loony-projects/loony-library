@@ -67,12 +67,12 @@ function redirectUriFor(req) {
 function config() {
   const cfg = {
     authUrl: (process.env.LOONY_AUTH_URL || "http://localhost:2001").replace(/\/+$/, ""),
-    clientId: process.env.CLIENT_ID,
-    secret: process.env.SECRET_KEY,
+    clientId: process.env.AUTH_CLIENT_ID,
+    secret: process.env.AUTH_SECRET_KEY,
   };
   if (!cfg.clientId || !cfg.secret)
     throw Object.assign(
-      new Error("CLIENT_ID and SECRET_KEY must be set (see .env.example)"),
+      new Error("AUTH_CLIENT_ID and AUTH_SECRET_KEY must be set (see .env.example)"),
       { status: 503 },
     );
   return cfg;

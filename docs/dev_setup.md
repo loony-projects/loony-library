@@ -16,7 +16,7 @@ that workspace first:
 (cd book-import && npm install)
 cd backend
 npm install
-cp .env.example .env   # set DATABASE_URL, plus CLIENT_ID / SECRET_KEY from loony-auth
+cp .env.example .env   # set DATABASE_URL, plus AUTH_CLIENT_ID / AUTH_SECRET_KEY from loony-auth
 npm run migrate          # includes 004: parser block types + chapter/section roles
 npm start                # http://localhost:4000
 ```
@@ -171,7 +171,7 @@ table - it has no API to add one to an existing app):
 
 ```sh
 psql "<loony-auth DATABASE_URL>" -c "insert into application_redirect_uris (application_id, redirect_uri)
-  values ('<CLIENT_ID>', 'https://books.lovegood.in/api/auth/callback') on conflict do nothing"
+  values ('<AUTH_CLIENT_ID>', 'https://books.lovegood.in/api/auth/callback') on conflict do nothing"
 ```
 
 After editing the tunnel config, restart cloudflared (it reads the config only
