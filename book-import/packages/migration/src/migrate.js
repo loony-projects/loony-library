@@ -63,7 +63,7 @@ async function main() {
   }
 
   await analyzeCodeBlocks(data); // code syntax errors, for the import report
-  const images = copyImages(data.chapters, data.book);
+  const images = await copyImages(data.chapters, data.book);
   console.log(describeImages(images));
   await loadIntoPostgres({ ...data, images, mode: args.mode, publish });
 }

@@ -10,9 +10,11 @@
     "dev": "node --watch src/server.js",
     "migrate": "node scripts/migrate.js",
     "editor": "node scripts/editor.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "images:push": "node scripts/pushImages.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1169.0",
     "@loony-library/markdown-parser": "file:../book-import/packages/markdown-parser",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

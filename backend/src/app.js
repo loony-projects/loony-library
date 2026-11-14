@@ -13,10 +13,9 @@ import { router as importReportRouter } from "./routes/importReport.js";
 
 import { authenticate, authRouter, editor, frontendOrigins } from "./auth.js";
 import { featuresRouter, visibility } from "./features.js";
+import { imageStore } from "./imageStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const IMAGES_DIR = path.resolve(__dirname, "..", "data", "images");
-const COVERS_DIR = path.resolve(__dirname, "..", "data", "covers");
 // The built frontend (`npm run build` in frontend/). When it's there, this
 // server is the whole site - app, API and images on one origin - which is
 // how https://books.lovegood.in is served through the Cloudflare tunnel.
@@ -36,8 +35,9 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "2mb" }));
-app.use("/images", express.static(IMAGES_DIR));
-app.use("/covers", express.static(COVERS_DIR));
+// On disk or in loony-s3 (IMAGE_STORE), at the same URLs either way.
+app.use("/images", imageStore().serve("images"));
+app.use("/covers", imageStore().serve("covers"));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.use("/api", authenticate, authRouter, featuresRouter);

@@ -1,22 +1,32 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { UsageError, countBlocks, countBySeverity } from "@loony-library/markdown-parser";
 import { snapshot, restore, describeReport, readingOrder } from "./reload.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const BACKEND_IMAGES_DIR = path.resolve(__dirname, "..", "..", "..", "..", "backend", "data", "images");
+import { createImageStore } from "../../../../backend/src/imageStore.js";
 
 // Image blocks reference files inconsistently (no "images/" prefix, another
 // extension than the file Marker wrote, a different folder). Each is matched
 // by base name - first in <sourceDir>/images, then anywhere under the book's
-// folder - and copied into a book-namespaced folder under the backend's
-// static image root, so two books' identically named page images
-// (`_page_0_Picture_10.*`) don't collide. Returns what was copied and every
+// folder - and stored under the book's slug in the backend's image store
+// (backend/data/images, or loony-s3 with IMAGE_STORE=s3 - see
+// backend/src/imageStore.js), so two books' identically named page images
+// (`_page_0_Picture_10.*`) don't collide. Returns what was stored and every
 // image that wasn't found, with the page it's on.
-// dryRun: only resolve and report, copy nothing and leave the blocks as they are.
-export function copyImages(chapters, book, { destRoot = BACKEND_IMAGES_DIR, dryRun = false } = {}) {
+// dryRun: only resolve and report: store nothing, leave the blocks as they are.
+export async function copyImages(chapters, book, { store, dryRun = false } = {}) {
+  if (dryRun) return resolveImages(chapters, book, { dryRun });
+  store ??= createImageStore();
+  const found = resolveImages(chapters, book, { dryRun });
+  let unchanged = 0;
+  for (const real of found.toStore) if ((await store.put("images", `${book.slug}/${path.basename(real)}`, real)) === "unchanged") unchanged++;
+  const destDir = `${store.where("images")}${store.kind === "disk" ? path.sep : "/"}${book.slug}`;
+  return { destDir, copied: found.copied, unchanged, missing: found.missing };
+}
+
+// Finds each image block's file and (unless dryRun) points the block at its
+// stored name. Synchronous; copyImages stores the files it returns.
+export function resolveImages(chapters, book, { dryRun = false } = {}) {
   const bookDir = /^markdown(?:[-_].*)?$/i.test(path.basename(book.sourceDir)) ? path.dirname(book.sourceDir) : book.sourceDir;
   const baseName = (f) => path.basename(f).replace(/\.[^.]+$/, "").toLowerCase();
   const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
@@ -34,8 +44,8 @@ export function copyImages(chapters, book, { destRoot = BACKEND_IMAGES_DIR, dryR
   };
   walkFiles(bookDir, 0);
 
-  const destDir = path.join(destRoot, book.slug);
   const copied = new Set();
+  const toStore = [];
   const missing = [];
   const walk = (sections) => {
     for (const s of sections) {
@@ -52,8 +62,7 @@ export function copyImages(chapters, book, { destRoot = BACKEND_IMAGES_DIR, dryR
         }
         block.content.src = `${book.slug}/${path.basename(real)}`;
         if (!copied.has(real)) {
-          fs.mkdirSync(destDir, { recursive: true });
-          fs.copyFileSync(real, path.join(destDir, path.basename(real)));
+          toStore.push(real);
           copied.add(real);
         }
       }
@@ -61,11 +70,11 @@ export function copyImages(chapters, book, { destRoot = BACKEND_IMAGES_DIR, dryR
     }
   };
   chapters.forEach((c) => walk(c.sections));
-  return { destDir, copied: copied.size, missing };
+  return { copied: copied.size, toStore, missing };
 }
 
-export function describeImages({ destDir, copied, missing }, { limit = 20 } = {}) {
-  const lines = [`Images: copied ${copied} file(s) to ${destDir}${missing.length ? `; ${missing.length} not found in the book's folder:` : "."}`];
+export function describeImages({ destDir, copied, unchanged = 0, missing }, { limit = 20 } = {}) {
+  const lines = [`Images: stored ${copied} file(s) in ${destDir}${unchanged ? ` (${unchanged} already there)` : ""}${missing.length ? `; ${missing.length} not found in the book's folder:` : "."}`];
   for (const m of missing.slice(0, limit)) lines.push(`  ${m.src}  (${[m.file, m.line].filter(Boolean).join(":") || "unknown page"})`);
   if (missing.length > limit) lines.push(`  ... and ${missing.length - limit} more`);
   return lines.join("\n");

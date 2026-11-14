@@ -18,4 +18,7 @@ export const childEnv = {
   ...process.env,
   DATABASE_URL,
   PGOPTIONS: `-c search_path=${SCHEMA}`,
+  // Images on this machine's disk, even when backend/.env uses loony-s3:
+  // the browser tests mustn't need it, or write to it.
+  IMAGE_STORE: "disk",
 };

@@ -1,8 +1,8 @@
+import { imageStore } from "./imageStore.js";
 import { imageType } from "./imageType.js";
 import { HEADLINE_OPTIONS, plainSnippet } from "./searchSnippet.js";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
 import multer from "multer";
 import { pool } from "./db.js";
 import { editor, signedIn } from "./auth.js";
@@ -428,10 +428,8 @@ r.post(
     const b = req.file?.buffer,
       ext = imageType(b);
     if (!ext) throw fail("Upload a PNG, JPEG or WebP image");
-    const dir = new URL("../data/images/", import.meta.url);
-    await fs.mkdir(dir, { recursive: true });
     const name = `${randomUUID()}.${ext}`;
-    await fs.writeFile(new URL(name, dir), b);
+    await imageStore().put("images", name, b);
     res.status(201).json({ path: name });
   }),
 );

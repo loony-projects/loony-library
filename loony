@@ -28,6 +28,10 @@
 #   migrate               Apply pending library database migrations
 #   editor <email>        Give an account editor access (it must have signed
 #                         in once)
+#   images push [--dry-run]
+#                         Upload backend/data/images and covers to the
+#                         loony-s3 bucket in backend/.env (S3_*), skipping
+#                         files already there; see docs/dev_setup.md
 #
 # Books (args go to the tool, see docs/migration.md). Except for import, the
 # book is the one in UPLOAD_BOOK_PATH, book-import/.env.
@@ -347,6 +351,13 @@ cmd_editor() {
   npm_in backend editor "$1"
 }
 
+cmd_images() {
+  case "${1:-}" in
+    push) shift; npm_in backend images:push "$@" ;;
+    *) echo "usage: ./loony images push [--dry-run]" >&2; exit 2 ;;
+  esac
+}
+
 cmd_logs() {
   [ "$#" -eq 1 ] || { echo "usage: ./loony logs <service> (services: ${SERVICES[*]})" >&2; exit 2; }
   pick "" "$1"
@@ -371,6 +382,7 @@ case "$cmd" in
   migrate) npm_in backend migrate ;;
   editor) cmd_editor "$@" ;;
   book) cmd_book "$@" ;;
+  images) cmd_images "$@" ;;
   help | -h | --help) usage ;;
   *)
     echo "unknown command '$cmd'" >&2

@@ -1,15 +1,10 @@
 import { publishedSQL } from "../features.js";
 import { imageType } from "../imageType.js";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { imageStore } from "../imageStore.js";
 import { Router } from "express";
 import multer from "multer";
 import { pool, resolveBookId } from "../db.js";
 import { slugify } from "../slugify.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const COVERS_DIR = path.resolve(__dirname, "..", "..", "data", "covers");
 
 // Kept in memory rather than written straight to disk: the cover's final
 // filename is derived from the book's (uniquified) slug, which isn't known
@@ -101,8 +96,7 @@ router.post("/books", uploadCover.single("cover"), async (req, res, next) => {
           .json({ error: "Cover must be a PNG, JPEG or WebP image" });
       }
       coverImage = `${slug}.${ext}`;
-      fs.mkdirSync(COVERS_DIR, { recursive: true });
-      fs.writeFileSync(path.join(COVERS_DIR, coverImage), req.file.buffer);
+      await imageStore().put("covers", coverImage, req.file.buffer);
     }
 
     const {

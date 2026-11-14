@@ -46,6 +46,12 @@ services:
       CLIENT_ID: ${CLIENT_ID:-}
       SECRET_KEY: ${SECRET_KEY:-}
       OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-http://localhost:4000/api/auth/callback}
+      IMAGE_STORE: ${IMAGE_STORE:-disk}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_CLIENT_ID: ${S3_CLIENT_ID:-}
+      S3_CLIENT_SECRET: ${S3_CLIENT_SECRET:-}
     volumes:
       - backend-data:/app/backend/data
     ports:

@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
 import { parseBookDirectory, countBySeverity, UsageError, unmangleBook, analyzeCodeBlocks } from "@loony-library/markdown-parser";
-import { copyImages, loadIntoPostgres } from "./load.js";
+import { copyImages, resolveImages, loadIntoPostgres } from "./load.js";
 
 function parseArgs(argv) {
   const args = { folder: null, apply: false };
@@ -47,7 +47,7 @@ function survey(dir, loaded) {
     if (unmangled) row.unmangled = true;
     const data = parseBookDirectory(dir);
     const severity = countBySeverity(data.diagnostics);
-    const images = copyImages(data.chapters, data.book, { dryRun: true });
+    const images = resolveImages(data.chapters, data.book, { dryRun: true });
     Object.assign(row, {
       data,
       slug: data.book.slug,
@@ -108,7 +108,7 @@ async function main() {
     console.log(`\n== ${r.title} (${r.slug})`);
     try {
       await analyzeCodeBlocks(r.data);
-      const images = copyImages(r.data.chapters, r.data.book);
+      const images = await copyImages(r.data.chapters, r.data.book);
       await loadIntoPostgres({ ...r.data, images, mode: r.action, publish: r.data.book.publish === true });
     } catch (error) {
       failed++;

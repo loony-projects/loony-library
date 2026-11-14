@@ -61,21 +61,18 @@ export async function epub(book, sections) {
   const { default: remarkParse } = await import("remark-parse");
   const { default: remarkGfm } = await import("remark-gfm");
   const { blocksToMarkdown } = await import("../../frontend/src/markdown.js");
-  const { readFile } = await import("node:fs/promises");
-  const { resolve, sep } = await import("node:path");
-  const { fileURLToPath } = await import("node:url");
+  const { imageStore, safeName } = await import("./imageStore.js");
   const { imageType } = await import("./imageType.js");
   const parser = unified().use(remarkParse).use(remarkGfm);
   const assets = new Map();
-  const root = fileURLToPath(new URL("../data/images/", import.meta.url));
   async function render(node) {
     if (node.type === "image") {
       // Only package local raster assets. Never fetch editor-supplied URLs.
-      const filename = resolve(root, node.url);
-      if (filename.startsWith(root.endsWith(sep) ? root : root + sep)) {
+      const filename = safeName(node.url);
+      if (filename) {
         try {
-          const bytes = await readFile(filename),
-            type = imageType(bytes);
+          const bytes = await imageStore().get("images", filename),
+            type = bytes && imageType(bytes);
           if (type) {
             if (!assets.has(filename))
               assets.set(filename, {

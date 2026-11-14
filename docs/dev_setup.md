@@ -79,6 +79,47 @@ it isn't found, the library starts anyway, without sign-in. A plain
 `./loony stop` (or `restart`) stops loony-auth only if `./loony` started it,
 since other apps may share it.
 
+## Images in loony-s3
+
+Book images and covers are served at `/images/...` and `/covers/...`. By
+default they live in `backend/data/images` and `backend/data/covers`. With
+`IMAGE_STORE=s3` in `backend/.env` they live in a
+[loony-s3](../../loony-s3) bucket instead: the book loader uploads to it, and
+the backend signs each request and streams the image back. loony-s3 has no
+public reads, so browsers never reach it directly. The URLs and the database
+are the same either way, so you can switch back and forth.
+
+```sh
+IMAGE_STORE=s3
+S3_ENDPOINT=http://127.0.0.1:7353   # loony-s3 API (LS3_BIND_ADDR)
+S3_REGION=us-east-1                 # LS3_REGION on the loony-s3 server
+S3_BUCKET=loony-library
+S3_CLIENT_ID=...
+S3_CLIENT_SECRET=...
+```
+
+The book loader (`./loony book ...`) reads these from `backend/.env` too,
+unless they're set in its own environment. In the bucket, images are under
+`images/<book-slug>/` and covers under `covers/`.
+
+To set it up:
+
+1. **A key.** In loony-s3's admin panel (see `loony-s3/docs/admin.md`),
+   under **Access keys**, create a key for the library. Its secret is shown
+   once. Put both in `backend/.env` as `S3_CLIENT_ID` and
+   `S3_CLIENT_SECRET`, with `IMAGE_STORE` still unset.
+2. **The bucket**, created with that key, because a bucket belongs to the
+   key that creates it. Any S3 client works, for example
+   `AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... aws --endpoint-url http://127.0.0.1:7353 s3 mb s3://loony-library`.
+3. **Copy what's on disk:** `./loony images push --dry-run`, then
+   `./loony images push`. It skips files already in the bucket with the same
+   bytes, so it's safe to run again.
+4. **Switch:** set `IMAGE_STORE=s3`, then `./loony restart backend`. Keep
+   `backend/data/images` until you've checked a few books.
+
+The browser tests always use the disk store (`e2e/env.mjs`), so they never
+need loony-s3 or write to it.
+
 ## Browser smoke test
 
 ```sh
@@ -143,14 +184,14 @@ The Vite dev server (5173) stays local-only: never expose it through the tunnel.
 
 ```
 React (5173) --fetch--> Express (4000) --pg--> Postgres (loony_library)
-                              └-- static /images --> repo-root images/
+                              └-- /images, /covers --> backend/data/ (or loony-s3, IMAGE_STORE=s3)
 ```
 
 CORS on the backend is locked to `CORS_ORIGIN` (defaults to the Vite dev origin) — update it if the frontend is served from somewhere else.
 
 ## What's implemented
 
-- Backend: `/api/books`, `/api/books/:slug`, `/api/books/:slug/toc`, `/api/sections/:id`, `/api/books/:slug/search`, `/api/books/:slug/glossary`, `/api/books/:slug/symbols`, static `/images`.
+- Backend: `/api/books`, `/api/books/:slug`, `/api/books/:slug/toc`, `/api/sections/:id`, `/api/books/:slug/search`, `/api/books/:slug/glossary`, `/api/books/:slug/symbols`, `/images` and `/covers` (disk or loony-s3).
 - Frontend: a library landing page listing every book, sidebar table-of-contents reader, section page (breadcrumbs, paragraph/list/image/table/blockquote rendering, sub-section links), debounced search with snippet highlighting, Abbreviations page.
 
 ## Not built yet
